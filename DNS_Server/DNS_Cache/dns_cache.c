@@ -36,6 +36,7 @@ cache_entry* new_cache_entry()
     {
         node->child[i] = NULL;
     }
+    return node;
 }
 
 void cache_initialize()

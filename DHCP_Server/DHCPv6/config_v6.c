@@ -229,9 +229,8 @@ static int parse_host_block(FILE *fp, dhcpv6_subnet_t *subnet, const char *first
             }
             continue;
         }
-
-        return -1;
     }
+    return -1;
 }
 
 
