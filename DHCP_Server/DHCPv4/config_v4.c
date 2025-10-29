@@ -7,8 +7,7 @@
 
 #define MAX_LINE_LEN 1024
 
-//static char* trim(char* str)
-char* trim(char* str)
+static char* trim(char* str)
 {
     while(isspace((unsigned char)*str))
     {
@@ -49,8 +48,7 @@ int parse_mac_address(const char *str, uint8_t mac[6])
     return -1;
 }
 
-//static int parse_ip_list(const char* str, struct in_addr* addrs, int max_count)
-int parse_ip_list(const char* str, struct in_addr* addrs, int max_count)
+static int parse_ip_list(const char* str, struct in_addr* addrs, int max_count)
 {
     char* str_copy = strdup(str);
     char* token;
@@ -72,8 +70,7 @@ int parse_ip_list(const char* str, struct in_addr* addrs, int max_count)
     return count;
 }
 
-//static int parse_global_option(char* line, struct dhcp_global_options_t* global)
-int parse_global_option(char* line, struct dhcp_global_options_t* global)
+static int parse_global_option(char* line, struct dhcp_global_options_t* global)
 {
     char* key = strtok(line, " \t;"); 
     if (!key) return -1;
@@ -129,8 +126,7 @@ int parse_global_option(char* line, struct dhcp_global_options_t* global)
     return 0;
 }
 
-//static int parse_subnet_option(char* line, struct dhcp_subnet_t* subnet)
-int parse_subnet_option(char* line, struct dhcp_subnet_t* subnet)
+static int parse_subnet_option(char* line, struct dhcp_subnet_t* subnet)
 {
     char* token = strtok(line, " \t");
     if(strcmp(token, "range") == 0)
@@ -207,8 +203,7 @@ int parse_subnet_option(char* line, struct dhcp_subnet_t* subnet)
     return 0;
 }
 
-//static int parse_host_block(FILE* fp, struct dhcp_subnet_t* subnet)
-int parse_host_block(FILE* fp, struct dhcp_subnet_t* subnet)
+static int parse_host_block(FILE* fp, struct dhcp_subnet_t* subnet)
 {
     char line[MAX_LINE_LEN];
     struct dhcp_host_reservation_t* host = &subnet->hosts[subnet->host_count];
@@ -257,8 +252,7 @@ int parse_host_block(FILE* fp, struct dhcp_subnet_t* subnet)
     return -1;
 }
 
-//static int parse_subnet_block(FILE* fp, struct dhcp_config_t* config, char* first_line)
-int parse_subnet_block(FILE* fp, struct dhcp_config_t* config, char* first_line)
+static int parse_subnet_block(FILE* fp, struct dhcp_config_t* config, char* first_line)
 {
     struct dhcp_subnet_t* subnet = &config->subnets[config->subnet_count];
     memset(subnet, 0, sizeof(struct dhcp_subnet_t));
