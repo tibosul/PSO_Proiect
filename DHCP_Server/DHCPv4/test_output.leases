@@ -1,0 +1,52 @@
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by DHCPv4 Server
+#
+# authoring-byte-order entry is generated, DO NOT DELETE
+authoring-byte-order little-endian;
+
+# Server duid (DHCP Unique Identifier)
+server-duid "\000\001\000\001\053\377\214\372\000\014\051\132\173\254";
+
+#########################################################################
+# Lease Database Format
+#########################################################################
+# lease <ip-address> { ... }
+#   starts <epoch|date>;              - When lease started
+#   ends <epoch|date>;                - When lease expires
+#   tstp <epoch>;                     - Time State was Put (last state change)
+#   cltt <epoch>;                     - Client Last Transaction Time
+#   binding state <state>;            - Current state: active, free, abandoned, etc.
+#   next binding state <state>;       - State after transition
+#   hardware ethernet <mac>;          - Client MAC address
+#   uid <hex-string>;                 - Client identifier (option 61)
+#   client-hostname "<hostname>";     - Client's hostname
+#   vendor-class-identifier "<vci>";  - Vendor identification
+#   set vendor-string = "<string>";   - Vendor specific info
+#########################################################################
+
+# Last updated: Fri Oct 31 20:33:51 2025
+
+
+lease 192.168.1.100 {
+	starts 5 2025/10/31 20:33:51;
+	ends 5 2025/10/31 21:33:51;
+	tstp 5 2025/10/31 20:33:51;
+	cltt 5 2025/10/31 20:33:51;
+	binding state active;
+	hardware ethernet 00:11:22:33:44:aa;
+	uid "\001\000\021\042\063\104\252";
+	client-hostname "laptop-test";
+	vendor-class-identifier "MSFT 5.0";
+}
+
+lease 10.0.0.50 {
+	starts 5 2025/10/31 20:33:51;
+	ends 5 2025/10/31 21:03:51;
+	tstp 5 2025/10/31 20:33:51;
+	cltt 5 2025/10/31 20:33:51;
+	binding state active;
+	hardware ethernet aa:bb:cc:11:22:33;
+	uid "\001\252\273\314\021\042\063";
+	client-hostname "android-phone";
+	vendor-class-identifier "dhcpcd-9.4.1:Linux-5.15.0";
+}
