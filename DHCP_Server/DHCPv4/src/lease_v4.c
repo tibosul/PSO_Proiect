@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <time.h>
-#include "lease_v4.h"
+#include "../include/lease_v4.h"
 
 #define MAX_LINE_LEN 1024
 

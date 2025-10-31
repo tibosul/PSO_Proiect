@@ -1,6 +1,6 @@
-#include "ip_pool.h"
-#include "config_v4.h"
-#include "lease_v4.h"
+#include "../include/ip_pool.h"
+#include "../include/config_v4.h"
+#include "../include/lease_v4.h"
 #include <stdio.h>
 #include <arpa/inet.h>
 

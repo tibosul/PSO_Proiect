@@ -5,7 +5,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <arpa/inet.h>
-#include "config_v4.h"
+#include "../include/config_v4.h"
 
 #define MAX_LINE_LEN 1024
 

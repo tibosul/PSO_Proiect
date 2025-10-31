@@ -11,9 +11,9 @@
 #include <unistd.h>
 //#include <errno.h>
 #include <sys/time.h>
-#include "ip_pool.h"
-#include "config_v4.h"
-#include "lease_v4.h"
+#include "../include/ip_pool.h"
+#include "../include/config_v4.h"
+#include "../include/lease_v4.h"
 
 const char* ip_state_to_string( ip_state_t state)
 {
