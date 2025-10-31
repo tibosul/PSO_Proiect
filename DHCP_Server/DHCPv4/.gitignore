@@ -1,0 +1,37 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+
+# Test executables
+test_config_v4
+test_lease_extended
+test_lease_save
+test_ip_pool
+
+# Test output files
+test_output.leases
+data/test_output.leases
+
+# Temporary files
+*.tmp
+*~
+core
+*.swp
+*.swo
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db

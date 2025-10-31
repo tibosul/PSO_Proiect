@@ -1,9 +1,11 @@
-#include "config_v4.h"
+#define _GNU_SOURCE
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <arpa/inet.h>
+#include "config_v4.h"
 
 #define MAX_LINE_LEN 1024
 
@@ -337,7 +339,7 @@ int parse_config_file(const char* filename, struct dhcp_config_t* config)
 
 struct dhcp_subnet_t* find_subnet_for_ip(struct dhcp_config_t* config, struct in_addr ip)
 {
-    for(int i = 0; i < config->subnet_count; i++)
+    for(uint32_t i = 0; i < config->subnet_count; i++)
     {
         uint32_t ip_val = ntohl(ip.s_addr);
         uint32_t net_val = ntohl(config->subnets[i].network.s_addr);
@@ -353,7 +355,7 @@ struct dhcp_subnet_t* find_subnet_for_ip(struct dhcp_config_t* config, struct in
 
 struct dhcp_host_reservation_t* find_host_by_mac(struct dhcp_subnet_t* subnet, const uint8_t mac[6])
 {
-    for(int i = 0; i < subnet->host_count; i++)
+    for(uint32_t i = 0; i < subnet->host_count; i++)
     {
         if(memcmp(subnet->hosts[i].mac_address, mac, 6) == 0)
         {
@@ -370,7 +372,7 @@ void print_config(const struct dhcp_config_t* config)
     printf("Default Lease Time: %u seconds\n", config->global.default_lease_time);
     printf("Max Lease Time: %u seconds\n", config->global.max_lease_time);
     printf("DNS Servers: %d\n", config->global.dns_server_count);
-    for(int i = 0; i < config->global.dns_server_count; i++)
+    for(uint32_t i = 0; i < config->global.dns_server_count; i++)
     {
         char ip_str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &config->global.dns_servers[i], ip_str, INET_ADDRSTRLEN);
@@ -378,7 +380,7 @@ void print_config(const struct dhcp_config_t* config)
     }
 
     printf("\n--- Subnets (%d) ---\n", config->subnet_count);
-    for (int i = 0; i < config->subnet_count; i++)
+    for (uint32_t i = 0; i < config->subnet_count; i++)
     {
         const struct dhcp_subnet_t *subnet = &config->subnets[i];
         char ip_str[INET_ADDRSTRLEN];
@@ -395,7 +397,7 @@ void print_config(const struct dhcp_config_t* config)
         printf("  Domain: %s\n", subnet->domain_name);
         printf("  Host Reservations: %d\n", subnet->host_count);
         
-        for (int j = 0; j < subnet->host_count; j++)
+        for (uint32_t j = 0; j < subnet->host_count; j++)
         {
             printf("    - %s: %02x:%02x:%02x:%02x:%02x:%02x\n",
                    subnet->hosts[j].name,

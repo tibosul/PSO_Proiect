@@ -1,6 +1,4 @@
-#include "ip_pool.h"
-#include "config_v4.h"
-#include "lease_v4.h"
+#define _GNU_SOURCE
 #include <asm-generic/errno.h>
 #include <netinet/in.h>
 #include <stdint.h>
@@ -13,6 +11,9 @@
 #include <unistd.h>
 //#include <errno.h>
 #include <sys/time.h>
+#include "ip_pool.h"
+#include "config_v4.h"
+#include "lease_v4.h"
 
 const char* ip_state_to_string( ip_state_t state)
 {

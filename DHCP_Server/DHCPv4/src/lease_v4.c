@@ -1,4 +1,4 @@
-#include "lease_v4.h"
+#define _GNU_SOURCE
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <time.h>
+#include "lease_v4.h"
 
 #define MAX_LINE_LEN 1024
 
