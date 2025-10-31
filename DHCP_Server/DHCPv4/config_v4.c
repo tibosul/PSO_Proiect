@@ -9,18 +9,13 @@
 
 static char* trim(char* str)
 {
-    while(isspace((unsigned char)*str))
-    {
-        str++;
-    }
-
+    while(isspace((unsigned char)*str)) str++;
     if(*str == 0) return str;
+
     char* end = str + strlen(str) - 1;
-    while(end > str && isspace((unsigned char)*end))
-    {
-        end--;
-    }
+    while(end > str && isspace((unsigned char)*end)) end--;
     end[1] = '\0';
+
     return str;
 }
 
@@ -81,7 +76,7 @@ static int parse_global_option(char* line, struct dhcp_global_options_t* global)
         return 0;
     }
     
-    // Pentru "option domain-name-servers ..."
+    // For "option domain-name-servers ..."
     if(strcmp(key, "option") == 0)
     {
         char* opt_name = strtok(NULL, " \t");
