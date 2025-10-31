@@ -432,7 +432,7 @@ int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t
     FILE* fp = fopen(db->filename, "a");
     if(!fp)
     {
-        perror("Failed to open lease file for appending");
+        perror("Failed to open lease file for appending\n");
         return -1;
     }
 
