@@ -12,11 +12,18 @@ TEST_DIR = tests
 BUILD_DIR = build
 CONFIG_DIR = config
 DATA_DIR = data
+UTILS_DIR = utils
 
 # Source files
 SOURCES = $(SRC_DIR)/config_v4.c $(SRC_DIR)/lease_v4.c $(SRC_DIR)/ip_pool.c
 OBJECTS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
-HEADERS = $(INC_DIR)/config_v4.h $(INC_DIR)/lease_v4.h $(INC_DIR)/ip_pool.h
+
+# Utils files
+UTILS_SOURCES = $(UTILS_DIR)/string_utils.c $(UTILS_DIR)/network_utils.c $(UTILS_DIR)/time_utils.c $(UTILS_DIR)/encoding_utils.c
+UTILS_OBJECTS = $(patsubst $(UTILS_DIR)/%.c,$(BUILD_DIR)/%.o,$(UTILS_SOURCES))
+
+# Headers
+HEADERS = $(INC_DIR)/config_v4.h $(INC_DIR)/lease_v4.h $(INC_DIR)/ip_pool.h $(INC_DIR)/string_utils.h $(INC_DIR)/network_utils.h $(INC_DIR)/time_utils.h $(INC_DIR)/encoding_utils.h
 
 # Test files
 TEST_SOURCES = $(wildcard $(TEST_DIR)/test_*.c)
@@ -35,21 +42,25 @@ dirs:
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Object file compilation from utils/
+$(BUILD_DIR)/%.o: $(UTILS_DIR)/%.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # Test object files
 $(BUILD_DIR)/test_%.o: $(TEST_DIR)/test_%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Test executables
-$(BUILD_DIR)/test_config_v4: $(BUILD_DIR)/test_config_v4.o $(BUILD_DIR)/config_v4.o
+$(BUILD_DIR)/test_config_v4: $(BUILD_DIR)/test_config_v4.o $(BUILD_DIR)/config_v4.o $(UTILS_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-$(BUILD_DIR)/test_lease_extended: $(BUILD_DIR)/test_lease_extended.o $(BUILD_DIR)/lease_v4.o
+$(BUILD_DIR)/test_lease_extended: $(BUILD_DIR)/test_lease_extended.o $(BUILD_DIR)/lease_v4.o $(UTILS_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-$(BUILD_DIR)/test_lease_save: $(BUILD_DIR)/test_lease_save.o $(BUILD_DIR)/lease_v4.o
+$(BUILD_DIR)/test_lease_save: $(BUILD_DIR)/test_lease_save.o $(BUILD_DIR)/lease_v4.o $(UTILS_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-$(BUILD_DIR)/test_ip_pool: $(BUILD_DIR)/test_ip_pool.o $(BUILD_DIR)/ip_pool.o $(BUILD_DIR)/config_v4.o $(BUILD_DIR)/lease_v4.o
+$(BUILD_DIR)/test_ip_pool: $(BUILD_DIR)/test_ip_pool.o $(BUILD_DIR)/ip_pool.o $(BUILD_DIR)/config_v4.o $(BUILD_DIR)/lease_v4.o $(UTILS_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Individual build targets for convenience
@@ -102,6 +113,7 @@ help:
 	@echo "Project Structure:"
 	@echo "  src/      - Source files (.c)"
 	@echo "  include/  - Header files (.h)"
+	@echo "  utils/    - Utility functions (string, network, time, encoding)"
 	@echo "  tests/    - Test files"
 	@echo "  config/   - Configuration files"
 	@echo "  data/     - Data files (leases)"

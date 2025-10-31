@@ -14,7 +14,17 @@ DHCPv4/
 ├── include/               # Header files (.h)
 │   ├── config_v4.h
 │   ├── lease_v4.h
-│   └── ip_pool.h
+│   ├── ip_pool.h
+│   ├── string_utils.h
+│   ├── network_utils.h
+│   ├── time_utils.h
+│   └── encoding_utils.h
+│
+├── utils/                 # Funcții utilitare generale
+│   ├── string_utils.c     # Operații pe string-uri (trim)
+│   ├── network_utils.c    # Parsare IP/MAC, formatare
+│   ├── time_utils.c       # Parsare/formatare ISC DHCP time
+│   └── encoding_utils.c   # Octal/hex encoding pentru client ID
 │
 ├── tests/                 # Teste unitare
 │   ├── test_config_v4.c
@@ -106,6 +116,26 @@ make help
   - `AVAILABLE`, `ALLOCATED`, `RESERVED`, `EXCLUDED`, `CONFLICT`
 - Căutare IP liber eficient
 
+### ✅ Utility Functions (`utils/`)
+Funcții generale reutilizabile:
+
+#### String Utils (`string_utils.c/h`)
+- `trim()` - Eliminare whitespace de la începutul și sfârșitul string-urilor
+
+#### Network Utils (`network_utils.c/h`)
+- `parse_ip_address()` - Parsare adrese IPv4
+- `parse_mac_address()` - Parsare adrese MAC
+- `format_mac_address()` - Formatare MAC la string
+- `parse_ip_list()` - Parsare listă de IP-uri separate prin virgulă
+
+#### Time Utils (`time_utils.c/h`)
+- `parse_lease_time()` - Parsare format ISC DHCP ("4 2024/10/26 14:30:00")
+- `format_lease_time()` - Formatare Unix timestamp la ISC DHCP format
+
+#### Encoding Utils (`encoding_utils.c/h`)
+- `parse_client_id_from_string()` - Parsare octal/hex escape sequences
+- `format_client_id_to_string()` - Formatare client ID cu octal escapes
+
 ## 🧪 Teste
 
 Toate testele sunt în directorul `tests/`:
@@ -147,9 +177,15 @@ lease 192.168.1.100 {
 ## 🛠️ Dezvoltare
 
 ### Adăugare fișier sursă nou:
-1. Adaugă fișierul `.c` în `src/`
+1. Adaugă fișierul `.c` în `src/` (sau `utils/` pentru funcții generale)
 2. Adaugă header-ul `.h` în `include/`
-3. Actualizează `SOURCES` în Makefile
+3. Actualizează `SOURCES` (sau `UTILS_SOURCES`) în Makefile
+
+### Adăugare funcție utilitar:
+1. Creează fișierul în `utils/` (exemplu: `my_utils.c`)
+2. Creează header-ul în `include/` (`my_utils.h`)
+3. Adaugă la `UTILS_SOURCES` în Makefile
+4. Include header-ul în fișierele care îl folosesc
 
 ### Adăugare test nou:
 1. Creează `tests/test_<nume>.c`
@@ -165,9 +201,10 @@ lease 192.168.1.100 {
 ## 📊 Statistici Cod
 
 - **Fișiere sursă:** 3 (config_v4.c, lease_v4.c, ip_pool.c)
-- **Fișiere header:** 3
+- **Fișiere utils:** 4 (string_utils.c, network_utils.c, time_utils.c, encoding_utils.c)
+- **Fișiere header:** 7
 - **Teste:** 4
-- **Linii cod:** ~1500 LOC (fără teste)
+- **Linii cod:** ~1500 LOC (fără teste și utils)
 
 ## ⚠️ Limitări Actuale
 

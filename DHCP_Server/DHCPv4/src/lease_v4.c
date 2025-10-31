@@ -2,26 +2,18 @@
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
+//#include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <time.h>
 #include "../include/lease_v4.h"
+#include "../include/string_utils.h"
+#include "../include/network_utils.h"
+#include "../include/time_utils.h"
+#include "../include/encoding_utils.h"
 
 #define MAX_LINE_LEN 1024
-
-static char* trim(char* str)
-{
-    while(isspace((unsigned char)*str)) str++;
-    if(*str == 0) return str;
-    
-    char* end = str + strlen(str) - 1;
-    while(end > str && isspace((unsigned char)*end)) end--;
-    end[1] = '\0';
-    return str;
-}
 
 const char* lease_state_to_string(lease_state_t state)
 {
@@ -76,19 +68,6 @@ void lease_db_free(struct lease_database_t* db)
     }
 }
 
-static int parse_mac_from_lease(const char* str, uint8_t mac[6])
-{
-    uint32_t values[6];
-    if(sscanf(str, "%x:%x:%x:%x:%x:%x", &values[0], &values[1], &values[2], &values[3], &values[4], &values[5]) == 6)
-    {
-        for(int i = 0; i < 6; i++)
-        {
-            mac[i] = (uint8_t)values[i];
-        }
-        return 0;
-    }
-    return -1;
-}
 
 static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_line)
 {
@@ -162,7 +141,7 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
             char* mac_str = strtok(NULL, ";");
             if(mac_str)
             {
-                parse_mac_from_lease(trim(mac_str), lease->mac_address);
+                parse_mac_address(trim(mac_str), lease->mac_address);
             }
         }
         else if(strcmp(key, "uid") == 0)
@@ -731,158 +710,6 @@ void lease_db_print(const struct lease_database_t *db)
     }
 }
 
-//=============================================================================
-// Time Parsing Functions - ISC DHCP Format
-//=============================================================================
-
-// Parse ISC DHCP time format: "4 2024/10/26 14:30:00"
-// Format: <day-of-week> YYYY/MM/DD HH:MM:SS
-time_t parse_lease_time(const char* time_str)
-{
-    if(!time_str) return 0;
-
-    struct tm tm_info = {0};
-    int day_of_week;
-
-    // Parse: "4 2024/10/26 14:30:00"
-    int parsed = sscanf(time_str, "%d %d/%d/%d %d:%d:%d",
-                       &day_of_week,
-                       &tm_info.tm_year,
-                       &tm_info.tm_mon,
-                       &tm_info.tm_mday,
-                       &tm_info.tm_hour,
-                       &tm_info.tm_min,
-                       &tm_info.tm_sec);
-
-    if(parsed != 7)
-    {
-        // Fallback: try parsing as Unix timestamp
-        return (time_t)atoll(time_str);
-    }
-
-    // Adjust values for struct tm
-    tm_info.tm_year -= 1900;  // Years since 1900
-    tm_info.tm_mon -= 1;       // Months since January (0-11)
-    tm_info.tm_isdst = -1;     // Auto-detect DST
-
-    return mktime(&tm_info);
-}
-
-// Format Unix timestamp to ISC DHCP format
-void format_lease_time(time_t timestamp, char* output, size_t output_len)
-{
-    if(!output || output_len == 0) return;
-
-    struct tm* tm_info = localtime(&timestamp);
-    if(!tm_info)
-    {
-        snprintf(output, output_len, "0");
-        return;
-    }
-
-    int day_of_week = tm_info->tm_wday;  // 0=Sunday, 1=Monday, ..., 6=Saturday
-
-    snprintf(output, output_len, "%d %04d/%02d/%02d %02d:%02d:%02d",
-             day_of_week,
-             tm_info->tm_year + 1900,
-             tm_info->tm_mon + 1,
-             tm_info->tm_mday,
-             tm_info->tm_hour,
-             tm_info->tm_min,
-             tm_info->tm_sec);
-}
-
-//=============================================================================
-// Client ID Parsing Functions
-//=============================================================================
-
-// Parse uid from lease file format: uid "\001\000\021\042\063\104\125\252";
-// Format is octal escaped binary data
-int parse_client_id_from_string(const char* str, uint8_t* client_id, uint32_t* len)
-{
-    if(!str || !client_id || !len) return -1;
-
-    *len = 0;
-    const char* ptr = str;
-
-    // Skip leading whitespace and quotes
-    while(*ptr && (isspace(*ptr) || *ptr == '"')) ptr++;
-
-    // Parse octal escapes (\NNN) and regular characters
-    while(*ptr && *ptr != '"' && *len < MAX_CLIENT_ID_LEN)
-    {
-        if(*ptr == '\\')
-        {
-            ptr++;
-            if(*ptr >= '0' && *ptr <= '7')
-            {
-                // Octal escape sequence \NNN
-                int value = 0;
-                for(int i = 0; i < 3 && *ptr >= '0' && *ptr <= '7'; i++, ptr++)
-                {
-                    value = value * 8 + (*ptr - '0');
-                }
-                client_id[(*len)++] = (uint8_t)value;
-            }
-            else if(*ptr == 'x')
-            {
-                // Hex escape sequence \xNN
-                ptr++;
-                int value = 0;
-                for(int i = 0; i < 2 && isxdigit(*ptr); i++, ptr++)
-                {
-                    value = value * 16 + (isdigit(*ptr) ? (*ptr - '0') : (tolower(*ptr) - 'a' + 10));
-                }
-                client_id[(*len)++] = (uint8_t)value;
-            }
-            else
-            {
-                // Other escape (like \n, \t, etc.)
-                client_id[(*len)++] = *ptr++;
-            }
-        }
-        else
-        {
-            // Regular character
-            client_id[(*len)++] = *ptr++;
-        }
-    }
-
-    return 0;
-}
-
-// Format client_id to escaped string format for lease file
-void format_client_id_to_string(const uint8_t* client_id, uint32_t len, char* output, size_t output_len)
-{
-    if(!client_id || !output || output_len < 3 || len == 0)
-    {
-        if(output && output_len > 0) output[0] = '\0';
-        return;
-    }
-
-    char* ptr = output;
-    size_t remaining = output_len;
-
-    // Start with quote
-    *ptr++ = '"';
-    remaining--;
-
-    // Convert each byte to octal escape
-    for(uint32_t i = 0; i < len && remaining > 5; i++)
-    {
-        int written = snprintf(ptr, remaining, "\\%03o", client_id[i]);
-        if(written < 0 || written >= (int)remaining) break;
-        ptr += written;
-        remaining -= written;
-    }
-
-    // End with quote
-    if(remaining > 1)
-    {
-        *ptr++ = '"';
-        *ptr = '\0';
-    }
-}
 
 //=============================================================================
 // Helper Functions for Extended Lease Information

@@ -3,69 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <arpa/inet.h>
 #include "../include/config_v4.h"
+#include "../include/string_utils.h"
+#include "../include/network_utils.h"
 
 #define MAX_LINE_LEN 1024
-
-static char* trim(char* str)
-{
-    while(isspace((unsigned char)*str)) str++;
-    if(*str == 0) return str;
-
-    char* end = str + strlen(str) - 1;
-    while(end > str && isspace((unsigned char)*end)) end--;
-    end[1] = '\0';
-
-    return str;
-}
-
-int parse_ip_address(const char *str, struct in_addr *addr)
-{
-    if(inet_pton(AF_INET, str, addr) == 1)
-    {
-        return 0;
-    }
-    return -1;
-}
-
-int parse_mac_address(const char *str, uint8_t mac[6])
-{
-    uint32_t values[6];
-    if(sscanf(str, "%x:%x:%x:%x:%x:%x", &values[0], &values[1],
-        &values[2], &values[3], &values[4], &values[5]) == 6)
-        {
-            for(int i = 0; i < 6; i++)
-            {
-                mac[i] = (uint8_t)values[i];
-            }
-            return 0;
-        }
-    return -1;
-}
-
-static int parse_ip_list(const char* str, struct in_addr* addrs, int max_count)
-{
-    char* str_copy = strdup(str);
-    char* token;
-    char* saveptr;
-    int count = 0;
-
-    token = strtok_r(str_copy, ",", &saveptr);
-    while(token && count < max_count)
-    {
-        token = trim(token);
-        if(parse_ip_address(token, &addrs[count]) == 0)
-        {
-            count++;
-        }
-        token = strtok_r(NULL, ",", &saveptr);
-    }
-
-    free(str_copy);
-    return count;
-}
 
 static int parse_global_option(char* line, struct dhcp_global_options_t* global)
 {
