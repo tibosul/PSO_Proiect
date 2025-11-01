@@ -2,7 +2,6 @@
 #define LEASE_V4_H
 
 #include <stdint.h>
-#include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
 #include <time.h>

@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <time.h>
-#include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
 #include "config_v4.h"
