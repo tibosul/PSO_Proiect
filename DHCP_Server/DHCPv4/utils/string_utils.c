@@ -14,3 +14,11 @@ char* trim(char* str)
 
     return str;
 }
+
+char* remove_quotes(char* str)
+{
+    if(str[0] == '"') str++;
+    int len = strlen(str);
+    if(len > 0 && str[len - 1] == '"') str[len - 1] = '\0';
+    return str;
+}
