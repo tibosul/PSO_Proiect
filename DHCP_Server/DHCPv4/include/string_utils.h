@@ -8,4 +8,11 @@
  */
 char* trim(char* str);
 
+/**
+* @brief Remove quotes from both ends of a string
+* @param str String to remove quotes from (modified in place)
+* @return Pointer to modified string
+*/
+char* remove_quotes(char* str);
+
 #endif // STRING_UTILS_H

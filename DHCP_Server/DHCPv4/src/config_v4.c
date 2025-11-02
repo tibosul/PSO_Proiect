@@ -102,9 +102,7 @@ static int parse_subnet_option(char* line, struct dhcp_subnet_t* subnet)
         else if(strcmp(opt_name, "domain-name") == 0)
         {
             // Remove quote -- for example in "domain name example"
-            if(opt_value[0] == '"') opt_value++;
-            int len = strlen(opt_value);
-            if(len > 0 && opt_value[len - 1] == '"') opt_value[len - 1] = '\0';
+            opt_value = remove_quotes(opt_value);
             strncpy(subnet->domain_name, opt_value, MAX_DOMAIN_LENGTH);
         }
         else if(strcmp(opt_name, "domain-name-servers") == 0)
@@ -152,6 +150,7 @@ static int parse_host_block(FILE* fp, struct dhcp_subnet_t* subnet)
     {
         char* trimmed = trim(line);
 
+        //Ignore empty lines and comments
         if(strlen(trimmed) == 0 || trimmed[0] == '#') continue;
         
         if(strchr(trimmed, '}'))
@@ -181,9 +180,7 @@ static int parse_host_block(FILE* fp, struct dhcp_subnet_t* subnet)
                 {
                     hostname = trim(hostname);
                     // Remove quotes
-                    if(hostname[0] == '"') hostname++;
-                    int len = strlen(hostname);
-                    if(len > 0 && hostname[len - 1] == '"') hostname[len - 1] = '\0';
+                    hostname = remove_quotes(hostname);
                     strncpy(host->hostname, hostname, MAX_HOSTNAME_LENGTH - 1);
                 }
             }
@@ -197,7 +194,6 @@ static int parse_subnet_block(FILE* fp, struct dhcp_config_t* config, char* firs
     struct dhcp_subnet_t* subnet = &config->subnets[config->subnet_count];
     memset(subnet, 0, sizeof(struct dhcp_subnet_t));
 
-
     // Parse "subnet x.x.x.x netmask y.y.y.y {"
     char* token = strtok(first_line, " \t");
     if(strcmp(token, "subnet") != 0) return -1;
@@ -210,7 +206,6 @@ static int parse_subnet_block(FILE* fp, struct dhcp_config_t* config, char* firs
     {
         parse_ip_address(network, &subnet->network);
         parse_ip_address(netmask, &subnet->netmask);
-
     }
 
     char line[MAX_LINE_LEN];
