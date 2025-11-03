@@ -40,8 +40,7 @@ lease_state_t lease_state_from_string(const char* str)
     if(strcmp(str, "reserved") == 0) return LEASE_STATE_RESERVED;
     if(strcmp(str, "backup") == 0) return LEASE_STATE_BACKUP;
 
-    // Default to free if unknown
-    return LEASE_STATE_FREE;
+    return LEASE_STATE_UNKNOWN;
 }
 
 bool lease_is_expired(const struct dhcp_lease_t* lease)
@@ -160,9 +159,7 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
                 hostname = trim(hostname);
 
                 // Remove quotes
-                if(hostname[0] == '"') hostname++;
-                int len = strlen(hostname);
-                if(len > 0 && hostname[len - 1] == '"') hostname[len - 1] = '\0';
+                hostname = remove_quotes(hostname);
                 strncpy(lease->client_hostname, hostname, MAX_CLIENT_HOSTNAME - 1);
             }
         }
@@ -173,10 +170,8 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
             {
                 vendor = trim(vendor);
 
-                // Remove quotes if present
-                if(vendor[0] == '"') vendor++;
-                int len = strlen(vendor);
-                if(len > 0 && vendor[len - 1] == '"') vendor[len - 1] = '\0';
+                // Remove quotes
+                vendor = remove_quotes(vendor);
                 strncpy(lease->vendor_class_identifier, vendor, MAX_VENDOR_CLASS_LEN - 1);
             }
         }

@@ -19,7 +19,8 @@ typedef enum
     LEASE_STATE_RELEASED,       // Client released the lease
     LEASE_STATE_ABANDONED,      // Ping check failed or other issue
     LEASE_STATE_RESERVED,       // Static/reserved (from config)
-    LEASE_STATE_BACKUP          // Backup state for failover
+    LEASE_STATE_BACKUP,         // Backup state for failover
+    LEASE_STATE_UNKNOWN         // Unknown (used as return value to avoid warnings)
 } lease_state_t;
 
 struct dhcp_lease_t

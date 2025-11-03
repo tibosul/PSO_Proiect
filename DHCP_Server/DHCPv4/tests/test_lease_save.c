@@ -9,7 +9,7 @@ int main()
 
     // Create a simple database with a few leases
     struct lease_database_t db;
-    lease_db_init(&db, "test_output.leases");
+    lease_db_init(&db, "../data/dhcpv4_test.leases");
 
     // Add some test leases
     struct in_addr ip1, ip2;
@@ -21,7 +21,8 @@ int main()
 
     // Create lease 1
     struct dhcp_lease_t* lease1 = lease_db_add_lease(&db, ip1, mac1, 3600);
-    if(lease1) {
+    if(lease1)
+    {
         lease_set_client_id(lease1, (uint8_t[]){0x01, 0x00, 0x11, 0x22, 0x33, 0x44, 0xaa}, 7);
         lease_set_vendor_class(lease1, "MSFT 5.0");
         strncpy(lease1->client_hostname, "laptop-test", MAX_CLIENT_HOSTNAME - 1);
@@ -29,7 +30,8 @@ int main()
 
     // Create lease 2
     struct dhcp_lease_t* lease2 = lease_db_add_lease(&db, ip2, mac2, 1800);
-    if(lease2) {
+    if(lease2)
+    {
         lease_set_client_id(lease2, (uint8_t[]){0x01, 0xaa, 0xbb, 0xcc, 0x11, 0x22, 0x33}, 7);
         lease_set_vendor_class(lease2, "dhcpcd-9.4.1:Linux-5.15.0");
         strncpy(lease2->client_hostname, "android-phone", MAX_CLIENT_HOSTNAME - 1);
@@ -39,9 +41,12 @@ int main()
 
     // Save database
     printf("Saving database to test_output.leases...\n");
-    if(lease_db_save(&db) == 0) {
+    if(lease_db_save(&db) == 0)
+    {
         printf("✓ Database saved successfully\n\n");
-    } else {
+    }
+    else
+    {
         printf("✗ Failed to save database\n");
         return 1;
     }
@@ -52,10 +57,12 @@ int main()
     printf("=============================================================\n");
 
     FILE* fp = fopen("test_output.leases", "r");
-    if(fp) {
+    if(fp)
+    {
         char line[1024];
         int line_count = 0;
-        while(fgets(line, sizeof(line), fp) && line_count < 40) {
+        while(fgets(line, sizeof(line), fp) && line_count < 40)
+        {
             printf("%s", line);
             line_count++;
         }
