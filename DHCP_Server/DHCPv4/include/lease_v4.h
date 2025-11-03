@@ -25,6 +25,7 @@ typedef enum
 
 struct dhcp_lease_t
 {
+    uint64_t lease_id;           // Unique lease identifier (never changes)
     struct in_addr ip_address;
     uint8_t mac_address[6];
 
@@ -60,6 +61,7 @@ struct lease_database_t
     struct dhcp_lease_t leases[MAX_LEASES];
     uint32_t lease_count;
     char filename[256]; // Path to lease file
+    uint64_t next_lease_id;      // Counter for generating unique IDs
 };
 
 int lease_db_init(struct lease_database_t* db, const char* filename);
@@ -69,6 +71,12 @@ int lease_db_load(struct lease_database_t* db);
 int lease_db_save(struct lease_database_t* db);
 int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t* lease);
 
+
+// Generate next unique lease ID
+uint64_t lease_db_generate_id(struct lease_database_t* db);
+
+// Find lease by ID (stable reference)
+struct dhcp_lease_t* lease_db_find_by_id(struct lease_database_t* db, uint64_t lease_id);
 
 struct dhcp_lease_t* lease_db_add_lease(struct lease_database_t* db, struct in_addr ip, const uint8_t mac[6], uint32_t lease_time);
 struct dhcp_lease_t* lease_db_find_by_ip(struct lease_database_t* db, struct in_addr ip);

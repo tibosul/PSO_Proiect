@@ -206,7 +206,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
         entry->state = IP_STATE_AVAILABLE;
         memset(entry->mac_address, 0 ,6);
         entry->last_allocated = 0;
-        entry->lease = NULL;  // Initialize lease reference
+        entry->lease_id = 0;  // Initialize lease reference (0 = no lease)
 
         if(ip_is_network_address(entry->ip_address, subnet->network,subnet->netmask))
         {
@@ -274,7 +274,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
                 entry->state = IP_STATE_ALLOCATED;
                 memcpy(entry->mac_address, lease->mac_address, 6);
                 entry->last_allocated = lease->start_time;
-                entry->lease = lease;
+                entry->lease_id = lease->lease_id;
             }
             else if(new_state == IP_STATE_CONFLICT)
             {
@@ -283,7 +283,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
                     pool->available_count--;
                 }
                 entry->state = IP_STATE_CONFLICT;
-                entry->lease = lease;
+                entry->lease_id = lease->lease_id;
             }
             else if(new_state == IP_STATE_AVAILABLE)
             {
@@ -295,7 +295,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
                 }
                 entry->state = IP_STATE_AVAILABLE;
                 memset(entry->mac_address, 0, 6);
-                entry->lease = lease;
+                entry->lease_id = lease->lease_id;
             }
         }
     }
@@ -318,10 +318,29 @@ int ip_pool_reserve_ip(struct ip_pool_t *pool, struct in_addr ip, const uint8_t 
     struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, ip);
     if(!entry) return -1;
 
+    // Check if already allocated to DIFFERENT MAC
+    if(entry->state == IP_STATE_ALLOCATED &&
+       memcmp(entry->mac_address, mac, 6) != 0)
+    {
+        // IP already allocated to different client
+        char ip_str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &ip, ip_str, INET_ADDRSTRLEN);
+        fprintf(stderr, "WARNING: IP %s already allocated to different MAC\n", ip_str);
+        return -1;
+    }
+
     // Don't allow reserving static reservations or excluded IPs
     if(entry->state == IP_STATE_RESERVED || entry->state == IP_STATE_EXCLUDED)
     {
         return -1;
+    }
+
+    // If already allocated to SAME MAC, just update timestamp (idempotent)
+    if(entry->state == IP_STATE_ALLOCATED &&
+       memcmp(entry->mac_address, mac, 6) == 0)
+    {
+        entry->last_allocated = time(NULL);
+        return 0;  // No counter change needed
     }
 
     // Adjust counts based on state transition
@@ -337,7 +356,6 @@ int ip_pool_reserve_ip(struct ip_pool_t *pool, struct in_addr ip, const uint8_t 
         // Moving from conflict to allocated
         pool->allocated_count++;
     }
-    // If already ALLOCATED, counts don't change (just updating MAC/time)
 
     entry->state = IP_STATE_ALLOCATED;
     memcpy(entry->mac_address, mac, 6);
@@ -371,10 +389,16 @@ int ip_pool_mark_conflict(struct ip_pool_t *pool, struct in_addr ip)
     struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, ip);
     if(!entry) return -1;
 
+    // Update counters based on previous state
     if(entry->state == IP_STATE_AVAILABLE)
     {
         pool->available_count--;
     }
+    else if(entry->state == IP_STATE_ALLOCATED)
+    {
+        pool->allocated_count--;
+    }
+    // EXCLUDED and RESERVED don't affect counters
 
     entry->state = IP_STATE_CONFLICT;
     return 0;
@@ -499,25 +523,32 @@ int ip_pool_update_from_lease(struct ip_pool_t* pool, struct dhcp_lease_t* lease
     ip_state_t old_state = entry->state;
     ip_state_t new_state = ip_state_from_lease_state(lease->state);
 
-    // Update counters based on state transition
-    if(old_state == IP_STATE_AVAILABLE && new_state == IP_STATE_ALLOCATED)
+    // Handle ALL state transitions by decrement-then-increment
+    // Decrement old state counter
+    if(old_state == IP_STATE_AVAILABLE)
     {
         pool->available_count--;
-        pool->allocated_count++;
     }
-    else if(old_state == IP_STATE_ALLOCATED && new_state == IP_STATE_AVAILABLE)
+    else if(old_state == IP_STATE_ALLOCATED)
     {
         pool->allocated_count--;
+    }
+    // CONFLICT, EXCLUDED, RESERVED don't have dedicated counters
+
+    // Increment new state counter
+    if(new_state == IP_STATE_AVAILABLE)
+    {
         pool->available_count++;
     }
-    else if(old_state == IP_STATE_AVAILABLE && new_state == IP_STATE_CONFLICT)
+    else if(new_state == IP_STATE_ALLOCATED)
     {
-        pool->available_count--;
+        pool->allocated_count++;
     }
+    // CONFLICT, EXCLUDED, RESERVED don't have dedicated counters
 
     // Update entry
     entry->state = new_state;
-    entry->lease = lease;
+    entry->lease_id = lease->lease_id;
 
     if(new_state == IP_STATE_ALLOCATED)
     {
@@ -575,9 +606,15 @@ struct dhcp_lease_t* ip_pool_allocate_and_create_lease(struct ip_pool_t* pool,
             struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, result.ip_address);
             if(entry)
             {
-                entry->lease = existing_lease;
+                entry->lease_id = existing_lease->lease_id;
             }
             return existing_lease;
+        }
+        else
+        {
+            // Rollback: release IP from pool
+            ip_pool_release_ip(pool, result.ip_address);
+            return NULL;
         }
     }
     else
@@ -591,13 +628,17 @@ struct dhcp_lease_t* ip_pool_allocate_and_create_lease(struct ip_pool_t* pool,
             struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, result.ip_address);
             if(entry)
             {
-                entry->lease = new_lease;
+                entry->lease_id = new_lease->lease_id;
             }
             return new_lease;
         }
+        else
+        {
+            // Rollback: release IP from pool
+            ip_pool_release_ip(pool, result.ip_address);
+            return NULL;
+        }
     }
-
-    return NULL;
 }
 
 void ip_pool_print_stats(const struct ip_pool_t *pool)

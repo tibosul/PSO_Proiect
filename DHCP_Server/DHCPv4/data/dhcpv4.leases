@@ -272,3 +272,14 @@ lease 192.168.1.250 {
 	binding state active;
 	hardware ethernet aa:bb:cc:dd:ee:ff;
 }
+
+lease 192.168.1.250 {
+	# Lease ID (custom field)
+	set lease-id = "18";
+	starts 1 2025/11/03 10:19:05;
+	ends 1 2025/11/03 11:19:05;
+	tstp 1 2025/11/03 10:19:05;
+	cltt 1 2025/11/03 10:19:05;
+	binding state active;
+	hardware ethernet aa:bb:cc:dd:ee:ff;
+}
