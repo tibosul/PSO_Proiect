@@ -263,12 +263,3 @@ lease 192.168.1.250 {
   binding state active;
   hardware ethernet aa:bb:cc:dd:ee:ff;
 }
-
-lease 192.168.1.250 {
-	starts 1 2025/11/03 08:57:51;
-	ends 1 2025/11/03 09:57:51;
-	tstp 1 2025/11/03 08:57:51;
-	cltt 1 2025/11/03 08:57:51;
-	binding state active;
-	hardware ethernet aa:bb:cc:dd:ee:ff;
-}

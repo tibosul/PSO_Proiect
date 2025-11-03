@@ -26,7 +26,7 @@ struct ip_pool_entry_t
     ip_state_t state;
     uint8_t mac_address[6];
     time_t last_allocated;
-    struct dhcp_lease_t* lease;  // Reference to corresponding lease (if any)
+    uint64_t lease_id;  // Lease ID reference (0 = no lease)
 };
 
 struct ip_pool_t

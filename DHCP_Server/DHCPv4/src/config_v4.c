@@ -97,7 +97,7 @@ static int parse_subnet_option(char* line, struct dhcp_subnet_t* subnet)
         }
         else if(strcmp(opt_name, "subnet-mask") == 0)
         {
-            parse_ip_address(opt_name, &subnet->subnet_mask);
+            parse_ip_address(opt_value, &subnet->subnet_mask);
         }
         else if(strcmp(opt_name, "domain-name") == 0)
         {
