@@ -11,14 +11,16 @@ int main()
 
     // Initialize lease database
     struct lease_database_t db;
-    if(lease_db_init(&db, "dhcpv4.leases") != 0) {
+    if(lease_db_init(&db, "../data/dhcpv4.leases") != 0)
+    {
         fprintf(stderr, "Failed to initialize lease database\n");
         return 1;
     }
 
     // Load leases from file
     printf("Loading leases from dhcpv4.leases...\n");
-    if(lease_db_load(&db) != 0) {
+    if(lease_db_load(&db) != 0)
+    {
         fprintf(stderr, "Failed to load lease database\n");
         return 1;
     }
@@ -54,37 +56,45 @@ int main()
         format_lease_time(lease->end_time, time_buf, sizeof(time_buf));
         printf("  Ends:   %s\n", time_buf);
 
-        if(lease->tstp > 0) {
+        if(lease->tstp > 0)
+        {
             format_lease_time(lease->tstp, time_buf, sizeof(time_buf));
             printf("  Tstp:   %s\n", time_buf);
         }
 
-        if(lease->cltt > 0) {
+        if(lease->cltt > 0)
+        {
             format_lease_time(lease->cltt, time_buf, sizeof(time_buf));
             printf("  Cltt:   %s\n", time_buf);
         }
 
-        if(lease->client_id_len > 0) {
+        if(lease->client_id_len > 0)
+        {
             printf("  Client ID (%u bytes): ", lease->client_id_len);
-            for(uint32_t j = 0; j < lease->client_id_len; j++) {
+            for(uint32_t j = 0; j < lease->client_id_len; j++)
+            {
                 printf("%02x", lease->client_id[j]);
             }
             printf("\n");
         }
 
-        if(strlen(lease->client_hostname) > 0) {
+        if(strlen(lease->client_hostname) > 0)
+        {
             printf("  Hostname: %s\n", lease->client_hostname);
         }
 
-        if(strlen(lease->vendor_class_identifier) > 0) {
+        if(strlen(lease->vendor_class_identifier) > 0)
+        {
             printf("  Vendor: %s\n", lease->vendor_class_identifier);
         }
 
-        if(lease->is_abandoned) {
+        if(lease->is_abandoned)
+        {
             printf("  ⚠ ABANDONED\n");
         }
 
-        if(lease_is_expired(lease)) {
+        if(lease_is_expired(lease))
+        {
             printf("  ⚠ EXPIRED\n");
         }
 
@@ -101,7 +111,8 @@ int main()
     uint8_t new_mac[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
 
     struct dhcp_lease_t* new_lease = lease_db_add_lease(&db, new_ip, new_mac, 3600);
-    if(new_lease) {
+    if(new_lease)
+    {
         // Add some extended information
         lease_set_client_id(new_lease, (uint8_t[]){0x01, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}, 7);
         lease_set_vendor_class(new_lease, "Test Client v1.0");
@@ -148,7 +159,8 @@ int main()
 
     printf("Original: %s\n", test_uid);
     printf("Parsed (%u bytes): ", parsed_len);
-    for(uint32_t i = 0; i < parsed_len; i++) {
+    for(uint32_t i = 0; i < parsed_len; i++)
+    {
         printf("%02x", parsed_id[i]);
     }
     printf("\n");
@@ -164,7 +176,8 @@ int main()
     printf("Total leases in database: %u\n", db.lease_count);
 
     uint32_t count_by_state[7] = {0};
-    for(uint32_t i = 0; i < db.lease_count; i++) {
+    for(uint32_t i = 0; i < db.lease_count; i++)
+    {
         count_by_state[db.leases[i].state]++;
     }
 
