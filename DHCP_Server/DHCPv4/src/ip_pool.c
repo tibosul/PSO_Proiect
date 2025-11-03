@@ -356,6 +356,7 @@ int ip_pool_reserve_ip(struct ip_pool_t *pool, struct in_addr ip, const uint8_t 
         // Moving from conflict to allocated
         pool->allocated_count++;
     }
+    // If already ALLOCATED, counts don't change (just updating MAC/time)
 
     entry->state = IP_STATE_ALLOCATED;
     memcpy(entry->mac_address, mac, 6);
