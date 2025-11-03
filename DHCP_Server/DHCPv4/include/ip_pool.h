@@ -8,7 +8,7 @@
 #include "config_v4.h"
 #include "lease_v4.h"
 
-#define MAX_POOL_SIZE 256
+#define MAX_POOL_SIZE 1024
 
 typedef enum
 {
@@ -16,7 +16,8 @@ typedef enum
     IP_STATE_ALLOCATED,
     IP_STATE_RESERVED,
     IP_STATE_EXCLUDED,
-    IP_STATE_CONFLICT
+    IP_STATE_CONFLICT,
+    IP_STATE_UNKNOWN
 } ip_state_t;
 
 struct ip_pool_entry_t
@@ -25,6 +26,7 @@ struct ip_pool_entry_t
     ip_state_t state;
     uint8_t mac_address[6];
     time_t last_allocated;
+    struct dhcp_lease_t* lease;  // Reference to corresponding lease (if any)
 };
 
 struct ip_pool_t
@@ -64,6 +66,19 @@ bool ip_ping_check(struct in_addr ip, uint32_t timeout_ms);
 
 void ip_pool_print_stats(const struct ip_pool_t* pool);
 void ip_pool_print_detailed(const struct ip_pool_t* pool);
+
+ip_state_t ip_state_from_string(const char* str);
 const char* ip_state_to_string(ip_state_t state);
+
+// State mapping and synchronization
+ip_state_t ip_state_from_lease_state(lease_state_t lease_state);
+int ip_pool_sync_with_leases(struct ip_pool_t* pool, struct lease_database_t* lease_db);
+int ip_pool_update_from_lease(struct ip_pool_t* pool, struct dhcp_lease_t* lease);
+struct dhcp_lease_t* ip_pool_allocate_and_create_lease(struct ip_pool_t* pool,
+                                                        struct lease_database_t* lease_db,
+                                                        const uint8_t mac[6],
+                                                        struct in_addr requested_ip,
+                                                        struct dhcp_config_t* config,
+                                                        uint32_t lease_time);
 
 #endif // IP_POOL_H

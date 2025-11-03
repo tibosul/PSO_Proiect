@@ -4,20 +4,21 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 
-int main() {
+int main()
+{
     printf("--- Testing IP Pool Management ---\n\n");
-    
+
     // Load configuration
     struct dhcp_config_t config;
-    if(parse_config_file("dhcpv4.conf", &config) != 0)
+    if(parse_config_file("../config/dhcpv4.conf", &config) != 0)
     {
         fprintf(stderr, "Failed to load config\n");
         return 1;
     }
-    
+
     // Load lease database
     struct lease_database_t lease_db;
-    lease_db_init(&lease_db, "dhcpd.leases");
+    lease_db_init(&lease_db, "../data/dhcpv4.leases");
     lease_db_load(&lease_db);
     
     // Initialize IP pool for first subnet

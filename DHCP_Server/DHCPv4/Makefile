@@ -91,12 +91,13 @@ test: dirs $(TEST_EXECUTABLES)
 		echo "=========================================="; \
 		echo "Running: $$(basename $$test)"; \
 		echo "=========================================="; \
-		if [ "$$(basename $$test)" = "test_config_v4" ]; then \
-			cd $(BUILD_DIR) && ./$$test ../$(CONFIG_DIR)/dhcpv4.conf || true; \
-		elif [ "$$(basename $$test)" = "test_lease_extended" ]; then \
-			cd $(BUILD_DIR) && ./$$test ../$(DATA_DIR)/dhcpv4.leases || true; \
+		TEST_NAME=$$(basename $$test); \
+		if [ "$$TEST_NAME" = "test_config_v4" ]; then \
+			(cd $(BUILD_DIR) && ./$$TEST_NAME ../$(CONFIG_DIR)/dhcpv4.conf) || true; \
+		elif [ "$$TEST_NAME" = "test_lease_extended" ]; then \
+			(cd $(BUILD_DIR) && ./$$TEST_NAME ../$(DATA_DIR)/dhcpv4.leases) || true; \
 		else \
-			cd $(BUILD_DIR) && ./$$test || true; \
+			(cd $(BUILD_DIR) && ./$$TEST_NAME) || true; \
 		fi; \
 	done
 	@echo ""
@@ -146,7 +147,7 @@ list-tests:
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f test_output.leases
-	rm -f $(DATA_DIR)/test_output.leases
+	rm -f $(DATA_DIR)/dhcpv4_test.leases
 	rm -f *.tmp
 	rm -f *~
 	rm -f core
