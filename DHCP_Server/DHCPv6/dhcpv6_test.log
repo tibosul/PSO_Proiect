@@ -1,0 +1,194 @@
+2025-11-02 09:09:41 DHCPv6 [INFO]  Logger initialized
+2025-11-02 09:10:38 DHCPv6 [INFO]  Logger initialized
+2025-11-02 09:11:08 DHCPv6 [INFO]  Logger initialized
+2025-11-02 09:12:29 DHCPv6 [INFO]  Logger initialized
+2025-11-02 09:12:29 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-02 09:12:29 DHCPv6 [INFO]  v6-db init file=dhcpd6.leases
+2025-11-02 09:12:29 DHCPv6 [INFO]  Lease DB initialized: dhcpd6.leases
+2025-11-02 09:12:29 DHCPv6 [INFO]  Lease DB loaded (count=0)
+2025-11-02 09:12:29 DHCPv6 [INFO]  v6-db append one (IA_NA)
+2025-11-02 09:12:29 DHCPv6 [INFO]  v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-02 09:12:29 DHCPv6 [INFO]  Added IA_NA lease for 2001:db8:1::10
+2025-11-02 09:12:29 DHCPv6 [INFO]  v6-db append one (IA_PD)
+2025-11-02 09:12:29 DHCPv6 [INFO]  v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-02 09:12:29 DHCPv6 [INFO]  Added IA_PD lease for 2001:db8:3::/56
+2025-11-02 09:12:29 DHCPv6 [INFO]  v6-db saved 2 entries to dhcpd6.leases
+2025-11-02 09:12:29 DHCPv6 [INFO]  Lease DB saved to dhcpd6.leases
+2025-11-02 09:12:29 DHCPv6 [INFO]  Done.
+2025-11-02 09:14:07 DHCPv6 [INFO]  Logger initialized
+2025-11-02 09:14:07 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-02 09:14:07 DHCPv6 [INFO]  v6-db init file=dhcpd6.leases
+2025-11-02 09:14:07 DHCPv6 [INFO]  Lease DB initialized: dhcpd6.leases
+2025-11-02 09:14:07 DHCPv6 [INFO]  v6-db loaded 1 entries from dhcpd6.leases
+2025-11-02 09:14:07 DHCPv6 [INFO]  Lease DB loaded (count=1)
+2025-11-02 09:14:07 DHCPv6 [INFO]  v6-db append one (IA_NA)
+2025-11-02 09:14:07 DHCPv6 [INFO]  v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-02 09:14:07 DHCPv6 [INFO]  Added IA_NA lease for 2001:db8:1::10
+2025-11-02 09:14:07 DHCPv6 [INFO]  v6-db append one (IA_PD)
+2025-11-02 09:14:07 DHCPv6 [INFO]  v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-02 09:14:07 DHCPv6 [INFO]  Added IA_PD lease for 2001:db8:3::/56
+2025-11-02 09:14:07 DHCPv6 [INFO]  v6-db saved 3 entries to dhcpd6.leases
+2025-11-02 09:14:07 DHCPv6 [INFO]  Lease DB saved to dhcpd6.leases
+2025-11-02 09:14:07 DHCPv6 [INFO]  Done.
+2025-11-03 22:36:42 DHCPv6 [INFO]  Logger initialized
+2025-11-03 22:40:53 DHCPv6 [INFO]  Logger initialized
+2025-11-03 22:42:41 DHCPv6 [INFO]  Logger initialized
+2025-11-03 22:43:49 DHCPv6 [INFO]  Logger initialized
+2025-11-03 22:44:26 DHCPv6 [INFO]  Logger initialized
+2025-11-03 22:49:23 DHCPv6 [INFO]  Logger initialized
+2025-11-03 22:49:23 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-03 22:49:23 DHCPv6 [INFO]  v6-db init file=dhcpd6.leases
+2025-11-03 22:49:23 DHCPv6 [INFO]  Lease DB initialized: dhcpd6.leases
+2025-11-03 22:49:23 DHCPv6 [INFO]  v6-db loaded 3 entries from dhcpd6.leases
+2025-11-03 22:49:23 DHCPv6 [INFO]  Lease DB loaded (count=3)
+2025-11-03 22:49:23 DHCPv6 [INFO]  v6-db append one (IA_NA)
+2025-11-03 22:49:23 DHCPv6 [INFO]  v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-03 22:49:23 DHCPv6 [INFO]  Added IA_NA lease for 2001:db8:1::10
+2025-11-03 22:49:23 DHCPv6 [INFO]  v6-db append one (IA_PD)
+2025-11-03 22:49:23 DHCPv6 [INFO]  v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-03 22:49:23 DHCPv6 [INFO]  Added IA_PD lease for 2001:db8:3::/56
+2025-11-03 22:49:23 DHCPv6 [INFO]  v6-db saved 5 entries to dhcpd6.leases
+2025-11-03 22:49:23 DHCPv6 [INFO]  Lease DB saved to dhcpd6.leases
+2025-11-03 22:49:23 DHCPv6 [INFO]  Done.
+2025-11-04 17:35:20 DHCPv6 [INFO]  Logger initialized
+2025-11-04 17:35:20 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 17:35:20 DHCPv6 [INFO]  v6-db init file=dhcpd6.leases
+2025-11-04 17:35:20 DHCPv6 [INFO]  Lease DB initialized: dhcpd6.leases
+2025-11-04 17:35:20 DHCPv6 [INFO]  v6-db loaded 4 entries from dhcpd6.leases
+2025-11-04 17:35:20 DHCPv6 [INFO]  Lease DB loaded (count=4)
+2025-11-04 17:35:20 DHCPv6 [INFO]  v6-db append one (IA_NA)
+2025-11-04 17:35:20 DHCPv6 [INFO]  v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 17:35:20 DHCPv6 [INFO]  Added IA_NA lease for 2001:db8:1::10
+2025-11-04 17:35:20 DHCPv6 [INFO]  v6-db append one (IA_PD)
+2025-11-04 17:35:20 DHCPv6 [INFO]  v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 17:35:20 DHCPv6 [INFO]  Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 17:35:20 DHCPv6 [INFO]  v6-db saved 6 entries to dhcpd6.leases
+2025-11-04 17:35:20 DHCPv6 [INFO]  Lease DB saved to dhcpd6.leases
+2025-11-04 17:35:20 DHCPv6 [INFO]  Done.
+2025-11-04 18:17:37 DHCPv6 [INFO]  Logger initialized
+2025-11-04 18:17:37 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:11:05 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:11:05 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:12:35 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:12:35 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:13:58 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:13:58 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:17:05 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:17:05 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:20:05 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:20:05 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:24:16 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:24:16 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:28:43 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:28:43 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:30:14 DHCPv6 [INFO]  Logger initialized
+2025-11-04 19:30:14 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 19:30:14 DHCPv6 [INFO]  v6-db init file=dhcpd6.leases
+2025-11-04 19:30:14 DHCPv6 [INFO]  Lease DB initialized: dhcpd6.leases
+2025-11-04 19:30:14 DHCPv6 [INFO]  v6-db loaded 5 entries from dhcpd6.leases
+2025-11-04 19:30:14 DHCPv6 [INFO]  Lease DB loaded (count=5)
+2025-11-04 19:30:14 DHCPv6 [INFO]  v6-db append one (IA_NA)
+2025-11-04 19:30:14 DHCPv6 [INFO]  v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 19:30:14 DHCPv6 [INFO]  Added IA_NA lease for 2001:db8:1::10
+2025-11-04 19:30:14 DHCPv6 [INFO]  v6-db append one (IA_PD)
+2025-11-04 19:30:14 DHCPv6 [INFO]  v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 19:30:14 DHCPv6 [INFO]  Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 19:30:14 DHCPv6 [INFO]  v6-db saved 7 entries to dhcpd6.leases
+2025-11-04 19:30:14 DHCPv6 [INFO]  Lease DB saved to dhcpd6.leases
+2025-11-04 19:30:14 DHCPv6 [INFO]  Done.
+2025-11-04 20:23:02 DHCPv6 [INFO]  Logger initialized
+2025-11-04 20:23:02 DHCPv6 [INFO]  Config loaded from config/dhcpv6.conf
+2025-11-04 20:23:02 DHCPv6 [INFO]  v6-db init file=dhcpd6.leases
+2025-11-04 20:23:02 DHCPv6 [INFO]  Lease DB initialized: dhcpd6.leases
+2025-11-04 20:23:02 DHCPv6 [WARN]  v6-db: bad IA_PD block, skipping
+2025-11-04 20:23:02 DHCPv6 [INFO]  v6-db loaded 6 entries from dhcpd6.leases
+2025-11-04 20:23:02 DHCPv6 [INFO]  Lease DB loaded (count=6)
+2025-11-04 20:23:02 DHCPv6 [INFO]  v6-db append one (IA_NA)
+2025-11-04 20:23:02 DHCPv6 [INFO]  v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 20:23:02 DHCPv6 [INFO]  Added IA_NA lease for 2001:db8:1::10
+2025-11-04 20:23:02 DHCPv6 [INFO]  v6-db append one (IA_PD)
+2025-11-04 20:23:02 DHCPv6 [INFO]  v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 20:23:02 DHCPv6 [INFO]  Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 20:23:02 DHCPv6 [INFO]  v6-db saved 8 entries to dhcpd6.leases
+2025-11-04 20:23:02 DHCPv6 [INFO]  Lease DB saved to dhcpd6.leases
+2025-11-04 20:23:02 DHCPv6 [INFO]  Done.
+2025-11-04 20:27:48 DHCPv6 [INFO] Logger initialized
+2025-11-04 20:27:48 DHCPv6 [INFO] Config loaded from config/dhcpv6.conf
+2025-11-04 20:27:48 DHCPv6 [INFO] v6-db init file=leases/dhcpd6.leases
+2025-11-04 20:27:48 DHCPv6 [INFO] Lease DB initialized: leases/dhcpd6.leases
+2025-11-04 20:27:48 DHCPv6 [WARN] v6-db: bad IA_PD block, skipping
+2025-11-04 20:27:48 DHCPv6 [INFO] v6-db loaded 1 entries from leases/dhcpd6.leases
+2025-11-04 20:27:48 DHCPv6 [INFO] Lease DB loaded (count=1)
+2025-11-04 20:27:48 DHCPv6 [INFO] v6-db append one (IA_NA)
+2025-11-04 20:27:48 DHCPv6 [INFO] v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 20:27:48 DHCPv6 [INFO] Added IA_NA lease for 2001:db8:1::10
+2025-11-04 20:27:48 DHCPv6 [INFO] v6-db append one (IA_PD)
+2025-11-04 20:27:48 DHCPv6 [INFO] v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 20:27:48 DHCPv6 [INFO] Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 20:27:48 DHCPv6 [INFO] v6-db saved 3 entries to leases/dhcpd6.leases
+2025-11-04 20:27:48 DHCPv6 [INFO] Lease DB saved to leases/dhcpd6.leases
+2025-11-04 20:27:48 DHCPv6 [INFO] Done.
+2025-11-04 20:28:44 DHCPv6 [INFO] Logger initialized
+2025-11-04 20:28:44 DHCPv6 [INFO] Config loaded from config/dhcpv6.conf
+2025-11-04 20:28:44 DHCPv6 [INFO] v6-db init file=leases/dhcpd6.leases
+2025-11-04 20:28:44 DHCPv6 [INFO] Lease DB initialized: leases/dhcpd6.leases
+2025-11-04 20:28:44 DHCPv6 [WARN] v6-db: bad IA_PD block, skipping
+2025-11-04 20:28:44 DHCPv6 [INFO] v6-db loaded 7 entries from leases/dhcpd6.leases
+2025-11-04 20:28:44 DHCPv6 [INFO] Lease DB loaded (count=7)
+2025-11-04 20:28:44 DHCPv6 [INFO] v6-db append one (IA_NA)
+2025-11-04 20:28:44 DHCPv6 [INFO] v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 20:28:44 DHCPv6 [INFO] Added IA_NA lease for 2001:db8:1::10
+2025-11-04 20:28:44 DHCPv6 [INFO] v6-db append one (IA_PD)
+2025-11-04 20:28:44 DHCPv6 [INFO] v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 20:28:44 DHCPv6 [INFO] Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 20:28:44 DHCPv6 [INFO] v6-db saved 9 entries to leases/dhcpd6.leases
+2025-11-04 20:28:44 DHCPv6 [INFO] Lease DB saved to leases/dhcpd6.leases
+2025-11-04 20:28:44 DHCPv6 [INFO] Done.
+2025-11-04 20:29:54 DHCPv6 [INFO] Logger initialized
+2025-11-04 20:29:54 DHCPv6 [INFO] Config loaded from config/dhcpv6.conf
+2025-11-04 20:29:54 DHCPv6 [INFO] v6-db init file=leases/dhcpd6.leases
+2025-11-04 20:29:54 DHCPv6 [INFO] Lease DB initialized: leases/dhcpd6.leases
+2025-11-04 20:29:54 DHCPv6 [WARN] v6-db: bad IA_PD block, skipping
+2025-11-04 20:29:54 DHCPv6 [INFO] v6-db loaded 8 entries from leases/dhcpd6.leases
+2025-11-04 20:29:54 DHCPv6 [INFO] Lease DB loaded (count=8)
+2025-11-04 20:29:54 DHCPv6 [INFO] v6-db append one (IA_NA)
+2025-11-04 20:29:54 DHCPv6 [INFO] v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 20:29:54 DHCPv6 [INFO] Added IA_NA lease for 2001:db8:1::10
+2025-11-04 20:29:54 DHCPv6 [INFO] v6-db append one (IA_PD)
+2025-11-04 20:29:54 DHCPv6 [INFO] v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 20:29:54 DHCPv6 [INFO] Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 20:29:54 DHCPv6 [INFO] v6-db saved 10 entries to leases/dhcpd6.leases
+2025-11-04 20:29:54 DHCPv6 [INFO] Lease DB saved to leases/dhcpd6.leases
+2025-11-04 20:29:54 DHCPv6 [INFO] Done.
+2025-11-04 22:31:35 DHCPv6 [INFO] Logger initialized
+2025-11-04 22:31:35 DHCPv6 [INFO] Config loaded from config/dhcpv6.conf
+2025-11-04 22:31:35 DHCPv6 [INFO] v6-db init file=leases/dhcpd6.leases
+2025-11-04 22:31:35 DHCPv6 [INFO] Lease DB initialized: leases/dhcpd6.leases
+2025-11-04 22:31:35 DHCPv6 [WARN] v6-db: bad IA_PD block, skipping
+2025-11-04 22:31:35 DHCPv6 [INFO] v6-db loaded 9 entries from leases/dhcpd6.leases
+2025-11-04 22:31:35 DHCPv6 [INFO] Lease DB loaded (count=9)
+2025-11-04 22:31:35 DHCPv6 [INFO] v6-db append one (IA_NA)
+2025-11-04 22:31:35 DHCPv6 [INFO] v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 22:31:35 DHCPv6 [INFO] Added IA_NA lease for 2001:db8:1::10
+2025-11-04 22:31:35 DHCPv6 [INFO] v6-db append one (IA_PD)
+2025-11-04 22:31:35 DHCPv6 [INFO] v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 22:31:35 DHCPv6 [INFO] Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 22:31:35 DHCPv6 [INFO] v6-db saved 11 entries to leases/dhcpd6.leases
+2025-11-04 22:31:35 DHCPv6 [INFO] Lease DB saved to leases/dhcpd6.leases
+2025-11-04 22:31:35 DHCPv6 [INFO] Done.
+2025-11-04 22:32:21 DHCPv6 [INFO] Logger initialized
+2025-11-04 22:32:21 DHCPv6 [INFO] Config loaded from config/dhcpv6.conf
+2025-11-04 22:32:21 DHCPv6 [INFO] v6-db init file=leases/dhcpd6.leases
+2025-11-04 22:32:21 DHCPv6 [INFO] Lease DB initialized: leases/dhcpd6.leases
+2025-11-04 22:32:21 DHCPv6 [WARN] v6-db: bad IA_PD block, skipping
+2025-11-04 22:32:21 DHCPv6 [INFO] v6-db loaded 10 entries from leases/dhcpd6.leases
+2025-11-04 22:32:21 DHCPv6 [INFO] Lease DB loaded (count=10)
+2025-11-04 22:32:21 DHCPv6 [INFO] v6-db append one (IA_NA)
+2025-11-04 22:32:21 DHCPv6 [INFO] v6 add IA_NA duid=00:01:00:01:aa:bb:cc:dd:ee:ff:11:22 iaid=1234 ip=2001:db8:1::10 lease=3600s
+2025-11-04 22:32:21 DHCPv6 [INFO] Added IA_NA lease for 2001:db8:1::10
+2025-11-04 22:32:21 DHCPv6 [INFO] v6-db append one (IA_PD)
+2025-11-04 22:32:21 DHCPv6 [INFO] v6 add IA_PD duid=00:01:00:01:de:ad:be:ef:01:02:03:04 iaid=5678 prefix=2001:db8:3::/56 lease=7200s
+2025-11-04 22:32:21 DHCPv6 [INFO] Added IA_PD lease for 2001:db8:3::/56
+2025-11-04 22:32:21 DHCPv6 [INFO] v6-db saved 12 entries to leases/dhcpd6.leases
+2025-11-04 22:32:21 DHCPv6 [INFO] Lease DB saved to leases/dhcpd6.leases
+2025-11-04 22:32:21 DHCPv6 [INFO] Done.
