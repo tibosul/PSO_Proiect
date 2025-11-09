@@ -1,0 +1,18 @@
+$TTL 3600
+@       IN  SOA     dns.proiect_pso.ro. hostmaster.proiect_pso.ro. (
+                2025110901
+                86400
+                7200
+                3600000
+                172800 )
+
+        IN  NS      dns.proiect_pso.ro.
+        IN  NS      ns2.proiect_pso.ro.
+
+2.42.168.192.in-addr.arpa.     IN  PTR     dns.proiect_pso.ro.
+3.42.168.192.in-addr.arpa.     IN  PTR     ns2.proiect_pso.ro.
+4.42.168.192.in-addr.arpa.     IN  PTR     mail.proiect_pso.ro.
+33.42.168.192.in-addr.arpa.    IN  PTR     www.proiect_pso.ro.
+51.42.168.192.in-addr.arpa.    IN  PTR     pc1.proiect_pso.ro.
+52.42.168.192.in-addr.arpa.    IN  PTR     pc2.proiect_pso.ro.
+100.42.168.192.in-addr.arpa.   IN  PTR     server.proiect_pso.ro.
