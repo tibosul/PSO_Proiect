@@ -1,0 +1,26 @@
+$TTL 3600
+@       IN  SOA     dns.proiect_pso.ro. hostmaster.proiect_pso.ro. (
+                2025110901
+                86400
+                7200
+                3600000
+                172800 )
+
+        IN  NS      dns.proiect_pso.ro.
+        IN  NS      ns2.proiect_pso.ro.
+        IN  MX 10   mail.proiect_pso.ro.
+
+dns     IN  A       192.168.42.2
+ns2     IN  A       192.168.42.3
+www     IN  A       192.168.42.33
+mail    IN  A       192.168.42.4
+pc1     IN  A       192.168.42.51
+pc2     IN  A       192.168.42.52
+server  IN  A       192.168.42.100
+
+# Aliases (optional)
+web     IN  CNAME   www
+ftp     IN  CNAME   www
+
+# MX = Mail Exchanger
+# CNAME = Canonical Name
