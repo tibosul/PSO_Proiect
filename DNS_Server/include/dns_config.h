@@ -13,22 +13,24 @@ typedef enum {
     CONFIG_UNKNOWN
 } config_node_type;
 
+typedef struct config_node config_node;
+
 typedef struct {
     char *key;
     char *value;         
     config_node *sub_block;  
 } config_pair;
 
-typedef struct {
+struct config_node{
     config_node_type type;
     char *name;              
     char *zone_file;         
     config_pair *pairs;          
     config_node *next;          
-} config_node;
+};
 
-config_node *config_parse_file(const char *path);
-void config_free(config_node *root);
+config_node *parse_config_file(const char *path);
+void free_config(config_node *root);
 void config_dump(config_node *root); 
 
 #endif
