@@ -103,4 +103,7 @@ int lease_v6_cleanup(lease_v6_db_t* db);
 int lease_v6_mark_reserved(lease_v6_db_t* db, const struct in6_addr* ip6, const char* duid_hex, uint32_t iaid, const char* hostname);
 void lease_v6_db_print(const lease_v6_db_t* lease);
 
+int lease_v6_set_state(lease_v6_db_t* db, const struct in6_addr* ip6_addr, lease_state_t new_state);
+int lease_v6_mark_conflict(lease_v6_db_t* db, const struct in6_addr* ip6_addr, const char* reason); 
+
 #endif // LEASES6_H

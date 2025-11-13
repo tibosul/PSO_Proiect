@@ -14,84 +14,14 @@ authoring-byte-order little-endian;
 #   client-hostname "..."; vendor-class "..."; fqdn "...";
 # }
 # prefix <ipv6>/<plen> { ... }  # for IA_PD
-# Last updated: Tue Nov  4 22:32:21 2025
+# Last updated: Thu Nov 13 11:05:37 2025
 
 
 lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::1234 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 4 1970/01/01 02:00:00;
-	ends 4 1970/01/01 02:00:00;
-	iaid 0;
-	binding state free;
-}
-
-lease 2001:db8:1::10 {
-	starts 2 2025/11/04 22:32:21;
-	ends 2 2025/11/04 23:32:21;
-	tstp 2 2025/11/04 22:32:21;
-	cltt 2 2025/11/04 22:32:21;
+	starts 4 2025/11/13 11:05:37;
+	ends 4 2025/11/13 12:05:37;
+	tstp 4 2025/11/13 11:05:37;
+	cltt 4 2025/11/13 11:05:37;
 	duid 00:01:00:01:aa:bb:cc:dd:ee:ff:11:22;
 	iaid 1234;
 	binding state active;
@@ -99,12 +29,23 @@ lease 2001:db8:1::10 {
 }
 
 prefix 2001:db8:3::/56 {
-	starts 2 2025/11/04 22:32:21;
-	ends 3 2025/11/05 00:32:21;
-	tstp 2 2025/11/04 22:32:21;
-	cltt 2 2025/11/04 22:32:21;
+	starts 4 2025/11/13 11:05:37;
+	ends 4 2025/11/13 13:05:37;
+	tstp 4 2025/11/13 11:05:37;
+	cltt 4 2025/11/13 11:05:37;
 	duid 00:01:00:01:de:ad:be:ef:01:02:03:04;
 	iaid 5678;
 	binding state active;
 	client-hostname "router-andra";
+}
+
+lease 2001:db8:1::1000 {
+	starts 4 2025/11/13 11:05:37;
+	ends 4 2025/11/13 13:05:37;
+	tstp 4 2025/11/13 11:05:37;
+	cltt 4 2025/11/13 11:05:37;
+	duid 00:01:00:01:aa:bb:cc:dd:ee:ff:11:33;
+	iaid 4242;
+	binding state active;
+	client-hostname "tester-v6";
 }

@@ -18,6 +18,7 @@ SRCS_V6 := \
   $(SRCDIR)/config_v6.c \
   $(SRCDIR)/leases6.c \
   $(SRCDIR)/utilsv6.c \
+  $(SRCDIR)/ip6_pool.c \
   $(SRCDIR)/config_v6_validate.c \
   tests/test_conf_leases.c
 
