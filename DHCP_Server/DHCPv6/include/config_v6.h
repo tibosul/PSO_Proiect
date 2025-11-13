@@ -72,6 +72,11 @@ typedef struct
    struct in6_addr pd_pool_start_bin;
    struct in6_addr pd_pool_end_bin;
    bool has_pd_pool;
+
+   bool icmp6_probe_override;     
+   bool icmp6_probe;              
+   uint32_t icmp6_timeout_ms;         
+   bool has_icmp6_timeout;
 }dhcpv6_subnet_t;
 
 
@@ -97,6 +102,11 @@ typedef struct{
 
     char bootfile_url[256];
     bool has_bootfile_url;
+
+    bool icmp6_probe;              // enable/disable global ICMPv6 ping check
+    uint32_t icmp6_timeout_ms;         // timeout for probe (ms)
+    bool has_icmp6_timeout;
+
 }dhcpv6_global_t;
 
 

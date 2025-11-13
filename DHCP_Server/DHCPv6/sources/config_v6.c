@@ -170,6 +170,24 @@ static void parse_global_option(dhcpv6_config_t *cfg, char *line)
         return;
     }
 
+    if (starts_with(line, "option dhcp6.icmp6-probe")) {
+        char val[16] = {0};
+        if (sscanf(line, "option dhcp6.icmp6-probe %15s", val) == 1) {
+             cfg->global.icmp6_probe =
+                 (strcmp(val, "on")==0 || strcmp(val, "true")==0 || strcmp(val, "1")==0);
+        }
+         return;
+    }
+
+    if (starts_with(line, "option dhcp6.icmp6-timeout")) {
+        unsigned v = 0;
+        if (sscanf(line, "option dhcp6.icmp6-timeout %u", &v) == 1) {
+            cfg->global.icmp6_timeout_ms = v;
+            cfg->global.has_icmp6_timeout = true;
+        }
+        return;
+    }
+
     if (starts_with(line, "option dhcp6.")) return;
 }
 
@@ -474,6 +492,26 @@ static void parse_subnet_option(dhcpv6_subnet_t *subnet, char *line)
         return;
     }
 
+    if (starts_with(line, "option dhcp6.icmp6-probe")) {
+        char val[16] = {0};
+        if (sscanf(line, "option dhcp6.icmp6-probe %15s", val) == 1) {
+            subnet->icmp6_probe_override = true;
+            subnet->icmp6_probe =
+                (strcmp(val, "on")==0 || strcmp(val, "true")==0 || strcmp(val, "1")==0);
+        }
+        return;
+    }
+
+    if (starts_with(line, "option dhcp6.icmp6-timeout")) {
+        unsigned v = 0;
+        if (sscanf(line, "option dhcp6.icmp6-timeout %u", &v) == 1) {
+            subnet->icmp6_timeout_ms = v;
+            subnet->has_icmp6_timeout = true;
+        }
+        return;
+    }
+
+
     /* Unknown dhcp6.* subnet options are ignored. */
     if (starts_with(line, "option dhcp6.")) return;
 }
@@ -733,6 +771,16 @@ void dump_config_v6(const dhcpv6_config_t *cfg)
         if (s->has_preference)        printf("  preference        : %u\n", (unsigned)s->preference);
         if (s->has_sip_server_domain) printf("  SIP domain        : %s\n", s->sip_server_domain);
         if (s->has_bootfile_url)      printf("  bootfile-url      : %s\n", s->bootfile_url);
+
+        printf("Global ICMPv6 probe : %s\n", cfg->global.icmp6_probe ? "on" : "off");
+        if (cfg->global.has_icmp6_timeout)
+        printf("Global ICMPv6 tmo   : %u ms\n", cfg->global.icmp6_timeout_ms);
+
+        printf("  ICMPv6 probe      : ");
+        if (s->icmp6_probe_override) printf("%s (override)\n", s->icmp6_probe ? "on":"off");
+        else printf("inherit\n");
+        if (s->has_icmp6_timeout) printf("  ICMPv6 tmo        : %u ms\n", s->icmp6_timeout_ms);
+
 
         printf("Hosts: %u\n",s->host_count);
         for(uint16_t j=0;j<s->host_count;j++)

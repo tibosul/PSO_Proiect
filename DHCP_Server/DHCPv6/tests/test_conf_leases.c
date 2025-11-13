@@ -7,7 +7,7 @@
 #include "config_v6.h"
 #include "leases6.h"
 #include "utilsv6.h"
-
+#include "ip6_pool.h"
 // Dacă ai un header diferit pentru logger, ajustează aici:
 #include "logger.h"
 /* Fallback la printf dacă logger.h are alte nume;
@@ -22,6 +22,16 @@ static void banner(void) {
     puts("============================================================");
     puts("  DHCPv6 – Test config & leases");
     puts("============================================================");
+}
+
+
+
+static uint32_t pick_lease_time(const dhcpv6_config_t* cfg, const dhcpv6_subnet_t* sn) {
+    if (sn && sn->max_lease_time) return sn->max_lease_time;
+    if (sn && sn->default_lease_time) return sn->default_lease_time;
+    if (cfg->global.max_lease_time) return cfg->global.max_lease_time;
+    if (cfg->global.default_lease_time) return cfg->global.default_lease_time;
+    return 3600;
 }
 
 int main(void)
@@ -125,6 +135,51 @@ int main(void)
     log_info("Lease DB saved to %s", lease_path);
 
     /* 7) Printează în consolă (debug) */
+    lease_v6_db_print(&db);
+
+    if (cfg->subnet_count == 0) {
+        log_error("No IPv6 subnets configured — cannot init pool");
+        return -1;
+    }
+    dhcpv6_subnet_t* sn = &cfg->subnets[0];
+    struct ip6_pool_t pool;
+    if (ip6_pool_init(&pool, sn, &db) != 0) {
+        log_error("ip6_pool_init failed");
+        return -1;
+    }
+    ip6_pool_print_stats(&pool);
+    const char* test_duid = "00:01:00:01:aa:bb:cc:dd:ee:ff:11:33";
+    uint32_t test_iaid = 4242;
+    const char* test_hn = "tester-v6";
+
+    /* opțional: încearcă să ceri explicit o adresă; dacă nu, pune :: (zero) */
+    struct in6_addr req = {0};
+    inet_pton(AF_INET6, "2001:db8:1::20", &req); /* decomentează dacă vrei requested IP */
+
+    uint32_t lease_time = pick_lease_time(cfg, sn);
+
+    struct ip6_allocation_result_t ar =
+        ip6_pool_allocate(&pool, test_duid, test_iaid, test_hn, req, cfg, &db, lease_time);
+
+    if (!ar.success) {
+        if (ar.err_is_conflict) {
+            char cip[INET6_ADDRSTRLEN]; inet_ntop(AF_INET6, &ar.conflict_ip, cip, sizeof(cip));
+            log_error("Allocation failed: conflict on %s (%s)", cip, ar.conflict_reason?ar.conflict_reason:"probe");
+        } else {
+            log_error("Allocation failed: %s", ar.error_message);
+        }
+        /* nu ies din test — vreau să văd dump-urile măcar */
+    } else {
+        char ipstr[INET6_ADDRSTRLEN]; inet_ntop(AF_INET6, &ar.ip_address, ipstr, sizeof(ipstr));
+        log_info("Allocated IPv6 address: %s", ipstr);
+    }
+
+    /* 7) Salvează DB pe disc și arată detalii */
+    if (lease_v6_db_save(&db) != 0) {
+        log_error("lease_v6_db_save failed");
+        return 3;
+    }
+    ip6_pool_print_detailed(&pool);
     lease_v6_db_print(&db);
 
     log_info("Done.");

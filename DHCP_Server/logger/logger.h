@@ -33,7 +33,7 @@ typedef enum
 
 
 /*
- * iinit_logger
+ * init_logger
  *  Initializes the global logger instance.
  *
  * @param prefix   Optional short tag printed before level (e.g., "[DHCPv6]").
