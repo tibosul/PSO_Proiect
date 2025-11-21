@@ -1,8 +1,6 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 /*
-
- 
  * Features
  * - Levels: DEBUG, INFO, WARN, ERROR
  * - Output to stdout/stderr or to file (append mode)
@@ -84,4 +82,4 @@ log_level_t log_get_level();
 #define log_info(...)  log_msg(LOG_INFO,  __VA_ARGS__)
 #define log_debug(...) log_msg(LOG_DEBUG, __VA_ARGS__)
 
-#endif
+#endif //LOGGER_H
