@@ -1,8 +1,6 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 /*
-
- 
  * Features
  * - Levels: DEBUG, INFO, WARN, ERROR
  * - Output to stdout/stderr or to file (append mode)
