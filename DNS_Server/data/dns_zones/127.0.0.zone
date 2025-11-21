@@ -1,0 +1,13 @@
+$TTL 3600
+@       IN  SOA     dns.proiect_pso.ro. hostmaster.proiect_pso.ro. (
+                2025110901
+                86400
+                7200
+                3600000
+                172800 )
+
+        IN  NS      dns.proiect_pso.ro.
+1.0.0.127.in-addr.arpa.   IN  PTR     localhost.
+
+# SOA = Start of Authority
+# NS = Name server

@@ -28,6 +28,35 @@ const char* ip_state_to_string( ip_state_t state)
     }
 }
 
+ip_state_t ip_state_from_string(const char *str)
+{
+    if(strcmp(str, "available") == 0) return IP_STATE_AVAILABLE;
+    if(strcmp(str, "allocated") == 0) return IP_STATE_ALLOCATED;
+    if(strcmp(str, "reserved") == 0) return IP_STATE_RESERVED;
+    if(strcmp(str, "excluded") == 0) return IP_STATE_EXCLUDED;
+    if(strcmp(str, "conflict") == 0) return IP_STATE_CONFLICT;
+
+    return IP_STATE_UNKNOWN;
+}
+
+// Map lease state to IP pool state
+ip_state_t ip_state_from_lease_state(lease_state_t lease_state)
+{
+    switch(lease_state)
+    {
+        case LEASE_STATE_ACTIVE: return IP_STATE_ALLOCATED;
+        case LEASE_STATE_RESERVED: return IP_STATE_RESERVED;
+        case LEASE_STATE_ABANDONED: return IP_STATE_CONFLICT;
+        case LEASE_STATE_FREE:
+        case LEASE_STATE_EXPIRED:
+        case LEASE_STATE_RELEASED:
+            return IP_STATE_AVAILABLE;
+        case LEASE_STATE_BACKUP: return IP_STATE_ALLOCATED;  // Backup leases are still allocated
+        default:
+            return IP_STATE_UNKNOWN;
+    }
+}
+
 bool ip_is_network_address(struct in_addr ip, struct in_addr network, struct in_addr netmask)
 {
     uint32_t ip_val = ntohl(ip.s_addr);
@@ -177,6 +206,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
         entry->state = IP_STATE_AVAILABLE;
         memset(entry->mac_address, 0 ,6);
         entry->last_allocated = 0;
+        entry->lease_id = 0;  // Initialize lease reference (0 = no lease)
 
         if(ip_is_network_address(entry->ip_address, subnet->network,subnet->netmask))
         {
@@ -210,28 +240,66 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
         }
     }
 
+    // Sync with lease database - handle all lease states
     if(lease_db)
     {
+        time_t now = time(NULL);
         for(uint32_t i = 0; i < lease_db->lease_count; i++)
         {
             struct dhcp_lease_t* lease = &lease_db->leases[i];
 
-            if(lease->state == LEASE_STATE_ACTIVE)
+            // Check if lease is expired and update state if needed
+            if(lease->state == LEASE_STATE_ACTIVE && lease->end_time < now)
             {
-                struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, lease->ip_address);
+                lease->state = LEASE_STATE_EXPIRED;
+            }
 
-                if(entry && entry->state == IP_STATE_AVAILABLE)
+            struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, lease->ip_address);
+            if(!entry) continue;  // IP not in this pool's range
+
+            // Skip if already marked as RESERVED by config (static reservations take priority)
+            if(entry->state == IP_STATE_RESERVED) continue;
+
+            // Map lease state to IP state
+            ip_state_t new_state = ip_state_from_lease_state(lease->state);
+
+            // Update pool entry based on lease state
+            if(new_state == IP_STATE_ALLOCATED)
+            {
+                if(entry->state == IP_STATE_AVAILABLE)
                 {
-                    entry->state = IP_STATE_ALLOCATED;
-                    memcpy(entry->mac_address, lease->mac_address, 6);
-                    entry->last_allocated = lease->start_time;
                     pool->available_count--;
                     pool->allocated_count++;
                 }
+                entry->state = IP_STATE_ALLOCATED;
+                memcpy(entry->mac_address, lease->mac_address, 6);
+                entry->last_allocated = lease->start_time;
+                entry->lease_id = lease->lease_id;
+            }
+            else if(new_state == IP_STATE_CONFLICT)
+            {
+                if(entry->state == IP_STATE_AVAILABLE)
+                {
+                    pool->available_count--;
+                }
+                entry->state = IP_STATE_CONFLICT;
+                entry->lease_id = lease->lease_id;
+            }
+            else if(new_state == IP_STATE_AVAILABLE)
+            {
+                // Lease is expired/released/free - make IP available if not already
+                if(entry->state == IP_STATE_ALLOCATED)
+                {
+                    pool->allocated_count--;
+                    pool->available_count++;
+                }
+                entry->state = IP_STATE_AVAILABLE;
+                memset(entry->mac_address, 0, 6);
+                entry->lease_id = lease->lease_id;
             }
         }
     }
-    
+
     return 0;
 }
 
@@ -250,17 +318,45 @@ int ip_pool_reserve_ip(struct ip_pool_t *pool, struct in_addr ip, const uint8_t 
     struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, ip);
     if(!entry) return -1;
 
-    // Adjust counts based on old state
-    if(entry->state == IP_STATE_AVAILABLE)
+    // Check if already allocated to DIFFERENT MAC
+    if(entry->state == IP_STATE_ALLOCATED &&
+       memcmp(entry->mac_address, mac, 6) != 0)
     {
-        pool->available_count--;
+        // IP already allocated to different client
+        char ip_str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &ip, ip_str, INET_ADDRSTRLEN);
+        fprintf(stderr, "WARNING: IP %s already allocated to different MAC\n", ip_str);
+        return -1;
     }
 
-    // Only increment allocated_count if it wasn't already ALLOCATED
-    if(entry->state != IP_STATE_ALLOCATED)
+    // Don't allow reserving static reservations or excluded IPs
+    if(entry->state == IP_STATE_RESERVED || entry->state == IP_STATE_EXCLUDED)
     {
+        return -1;
+    }
+
+    // If already allocated to SAME MAC, just update timestamp (idempotent)
+    if(entry->state == IP_STATE_ALLOCATED &&
+       memcmp(entry->mac_address, mac, 6) == 0)
+    {
+        entry->last_allocated = time(NULL);
+        return 0;  // No counter change needed
+    }
+
+    // Adjust counts based on state transition
+    ip_state_t old_state = entry->state;
+
+    if(old_state == IP_STATE_AVAILABLE)
+    {
+        pool->available_count--;
         pool->allocated_count++;
     }
+    else if(old_state == IP_STATE_CONFLICT)
+    {
+        // Moving from conflict to allocated
+        pool->allocated_count++;
+    }
+    // If already ALLOCATED, counts don't change (just updating MAC/time)
 
     entry->state = IP_STATE_ALLOCATED;
     memcpy(entry->mac_address, mac, 6);
@@ -294,10 +390,16 @@ int ip_pool_mark_conflict(struct ip_pool_t *pool, struct in_addr ip)
     struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, ip);
     if(!entry) return -1;
 
+    // Update counters based on previous state
     if(entry->state == IP_STATE_AVAILABLE)
     {
         pool->available_count--;
     }
+    else if(entry->state == IP_STATE_ALLOCATED)
+    {
+        pool->allocated_count--;
+    }
+    // EXCLUDED and RESERVED don't affect counters
 
     entry->state = IP_STATE_CONFLICT;
     return 0;
@@ -398,6 +500,146 @@ struct ip_allocation_result_t ip_pool_allocate(struct ip_pool_t *pool, const uin
     result.success = false;
     snprintf(result.error_message, sizeof(result.error_message), "No available IPs in pool");
     return result;
+}
+
+// Update a single pool entry from a lease
+int ip_pool_update_from_lease(struct ip_pool_t* pool, struct dhcp_lease_t* lease)
+{
+    if(!pool || !lease) return -1;
+
+    struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, lease->ip_address);
+    if(!entry) return -1;  // IP not in this pool's range
+
+    // Skip if this is a static reservation (config takes priority)
+    if(entry->state == IP_STATE_RESERVED) return 0;
+
+    // Check if lease is expired
+    time_t now = time(NULL);
+    if(lease->state == LEASE_STATE_ACTIVE && lease->end_time < now)
+    {
+        lease->state = LEASE_STATE_EXPIRED;
+    }
+
+    // Map lease state to IP state
+    ip_state_t old_state = entry->state;
+    ip_state_t new_state = ip_state_from_lease_state(lease->state);
+
+    // Handle ALL state transitions by decrement-then-increment
+    // Decrement old state counter
+    if(old_state == IP_STATE_AVAILABLE)
+    {
+        pool->available_count--;
+    }
+    else if(old_state == IP_STATE_ALLOCATED)
+    {
+        pool->allocated_count--;
+    }
+    // CONFLICT, EXCLUDED, RESERVED don't have dedicated counters
+
+    // Increment new state counter
+    if(new_state == IP_STATE_AVAILABLE)
+    {
+        pool->available_count++;
+    }
+    else if(new_state == IP_STATE_ALLOCATED)
+    {
+        pool->allocated_count++;
+    }
+    // CONFLICT, EXCLUDED, RESERVED don't have dedicated counters
+
+    // Update entry
+    entry->state = new_state;
+    entry->lease_id = lease->lease_id;
+
+    if(new_state == IP_STATE_ALLOCATED)
+    {
+        memcpy(entry->mac_address, lease->mac_address, 6);
+        entry->last_allocated = lease->start_time;
+    }
+    else if(new_state == IP_STATE_AVAILABLE)
+    {
+        memset(entry->mac_address, 0, 6);
+    }
+
+    return 0;
+}
+
+// Sync entire pool with lease database (useful after lease changes)
+int ip_pool_sync_with_leases(struct ip_pool_t* pool, struct lease_database_t* lease_db)
+{
+    if(!pool || !lease_db) return -1;
+
+    for(uint32_t i = 0; i < lease_db->lease_count; i++)
+    {
+        ip_pool_update_from_lease(pool, &lease_db->leases[i]);
+    }
+
+    return 0;
+}
+
+// Allocate IP and create corresponding lease in database
+struct dhcp_lease_t* ip_pool_allocate_and_create_lease(struct ip_pool_t* pool,
+                                                        struct lease_database_t* lease_db,
+                                                        const uint8_t mac[6],
+                                                        struct in_addr requested_ip,
+                                                        struct dhcp_config_t* config,
+                                                        uint32_t lease_time)
+{
+    if(!pool || !lease_db || !mac || !config) return NULL;
+
+    // First, try to allocate from pool
+    struct ip_allocation_result_t result = ip_pool_allocate(pool, mac, requested_ip, config);
+
+    if(!result.success)
+    {
+        return NULL;
+    }
+
+    // Check if lease already exists for this IP
+    struct dhcp_lease_t* existing_lease = lease_db_find_by_ip(lease_db, result.ip_address);
+
+    if(existing_lease)
+    {
+        // Update existing lease
+        if(lease_db_renew_lease(lease_db, result.ip_address, lease_time) == 0)
+        {
+            // Update pool entry reference
+            struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, result.ip_address);
+            if(entry)
+            {
+                entry->lease_id = existing_lease->lease_id;
+            }
+            return existing_lease;
+        }
+        else
+        {
+            // Rollback: release IP from pool
+            ip_pool_release_ip(pool, result.ip_address);
+            return NULL;
+        }
+    }
+    else
+    {
+        // Create new lease
+        struct dhcp_lease_t* new_lease = lease_db_add_lease(lease_db, result.ip_address, mac, lease_time);
+
+        if(new_lease)
+        {
+            // Update pool entry reference
+            struct ip_pool_entry_t* entry = ip_pool_find_entry(pool, result.ip_address);
+            if(entry)
+            {
+                entry->lease_id = new_lease->lease_id;
+            }
+            return new_lease;
+        }
+        else
+        {
+            // Rollback: release IP from pool
+            ip_pool_release_ip(pool, result.ip_address);
+            return NULL;
+        }
+    }
 }
 
 void ip_pool_print_stats(const struct ip_pool_t *pool)
