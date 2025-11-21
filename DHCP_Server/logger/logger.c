@@ -1,4 +1,3 @@
-#include "logger.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +7,8 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <pthread.h>
+#include "logger.h"
+
 
 static log_level_t g_level=LOG_INFO;
 static char g_prefix[32];  // ex [DHCPv6]
