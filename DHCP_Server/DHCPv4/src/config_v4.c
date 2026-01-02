@@ -36,6 +36,28 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
             {
                 global->dns_server_count = parse_ip_list(opt_value, global->dns_servers, MAX_DNS_SERVERS);
             }
+            else if (strcmp(opt_name, "tftp-server-name") == 0)
+            {
+                // DHCP option 66 - TFTP server name or IP
+                opt_value = remove_quotes(opt_value);
+                strncpy(global->tftp_server_name, opt_value, sizeof(global->tftp_server_name) - 1);
+            }
+            else if (strcmp(opt_name, "bootfile-name") == 0)
+            {
+                // DHCP option 67 - Boot file name
+                opt_value = remove_quotes(opt_value);
+                strncpy(global->bootfile_name, opt_value, sizeof(global->bootfile_name) - 1);
+            }
+            else if (strcmp(opt_name, "dhcp-renewal-time") == 0)
+            {
+                // DHCP option 58 (T1) - Renewal time
+                global->renewal_time = atoi(opt_value);
+            }
+            else if (strcmp(opt_name, "dhcp-rebinding-time") == 0)
+            {
+                // DHCP option 59 (T2) - Rebinding time
+                global->rebinding_time = atoi(opt_value);
+            }
         }
         return 0;
     }
@@ -64,6 +86,41 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
     else if (strcmp(key, "ping-timeout") == 0)
     {
         global->ping_timeout = atoi(value);
+    }
+    else if (strcmp(key, "next-server") == 0)
+    {
+        // Boot server IP address for PXE
+        parse_ip_address(value, &global->next_server);
+    }
+    else if (strcmp(key, "filename") == 0)
+    {
+        // Boot file name for PXE
+        value = remove_quotes(value);
+        strncpy(global->filename, value, sizeof(global->filename) - 1);
+    }
+    else if (strcmp(key, "allow") == 0)
+    {
+        // Parse "allow unknown-clients", "allow bootp", etc.
+        if (strcmp(value, "unknown-clients") == 0)
+        {
+            global->allow_unknown_clients = true;
+        }
+        else if (strcmp(value, "bootp") == 0)
+        {
+            global->allow_bootp = true;
+        }
+    }
+    else if (strcmp(key, "deny") == 0)
+    {
+        // Parse "deny unknown-clients", "deny bootp", etc.
+        if (strcmp(value, "unknown-clients") == 0)
+        {
+            global->allow_unknown_clients = false;
+        }
+        else if (strcmp(value, "bootp") == 0)
+        {
+            global->allow_bootp = false;
+        }
     }
 
     return 0;
@@ -125,6 +182,28 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
         {
             subnet->netbios_server_count = parse_ip_list(opt_value, subnet->netbios_servers, MAX_NTP_SERVERS);
         }
+        else if (strcmp(opt_name, "tftp-server-name") == 0)
+        {
+            // DHCP option 66 - TFTP server name or IP (subnet override)
+            opt_value = remove_quotes(opt_value);
+            strncpy(subnet->tftp_server_name, opt_value, sizeof(subnet->tftp_server_name) - 1);
+        }
+        else if (strcmp(opt_name, "bootfile-name") == 0)
+        {
+            // DHCP option 67 - Boot file name (subnet override)
+            opt_value = remove_quotes(opt_value);
+            strncpy(subnet->bootfile_name, opt_value, sizeof(subnet->bootfile_name) - 1);
+        }
+        else if (strcmp(opt_name, "dhcp-renewal-time") == 0)
+        {
+            // DHCP option 58 (T1) - Renewal time (subnet override)
+            subnet->renewal_time = atoi(opt_value);
+        }
+        else if (strcmp(opt_name, "dhcp-rebinding-time") == 0)
+        {
+            // DHCP option 59 (T2) - Rebinding time (subnet override)
+            subnet->rebinding_time = atoi(opt_value);
+        }
     }
     else if (strcmp(token, "default-lease-time") == 0)
     {
@@ -140,6 +219,26 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
         if (value)
         {
             subnet->max_lease_time = atoi(trim(value));
+        }
+    }
+    else if (strcmp(token, "next-server") == 0)
+    {
+        // Boot server IP address for PXE (subnet override)
+        char *value = strtok(NULL, ";");
+        if (value)
+        {
+            parse_ip_address(trim(value), &subnet->next_server);
+        }
+    }
+    else if (strcmp(token, "filename") == 0)
+    {
+        // Boot file name for PXE (subnet override)
+        char *value = strtok(NULL, ";");
+        if (value)
+        {
+            value = trim(value);
+            value = remove_quotes(value);
+            strncpy(subnet->filename, value, sizeof(subnet->filename) - 1);
         }
     }
     return 0;

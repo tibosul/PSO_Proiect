@@ -22,6 +22,20 @@ struct dhcp_global_options_t
     bool ping_check;            // whether to ping the client before giving an address
     uint32_t ping_timeout;      // in seconds
     char ddns_update_style[32]; // DHCP or NONE
+
+    // PXE Boot support (network booting)
+    struct in_addr next_server;    // Boot server IP address
+    char filename[256];            // Boot file name (e.g., "pxelinux.0")
+    char tftp_server_name[256];    // DHCP option 66 - TFTP server name/IP
+    char bootfile_name[256];       // DHCP option 67 - Boot file name
+
+    // Lease renewal timers (T1 and T2)
+    uint32_t renewal_time;         // DHCP option 58 (T1) - time until RENEWING state (seconds)
+    uint32_t rebinding_time;       // DHCP option 59 (T2) - time until REBINDING state (seconds)
+
+    // Server behavior control
+    bool allow_unknown_clients;    // Allow clients without reservations (default: true)
+    bool allow_bootp;              // Allow BOOTP requests (default: true)
 };
 
 struct dhcp_host_reservation_t
@@ -55,6 +69,16 @@ struct dhcp_subnet_t
     // Subnet-specific lease times (optional overrides)
     uint32_t default_lease_time; // 0 means use global
     uint32_t max_lease_time;     // 0 means use global
+
+    // PXE Boot support (subnet-level overrides)
+    struct in_addr next_server;    // Boot server IP (0.0.0.0 means use global)
+    char filename[256];            // Boot file name (empty means use global)
+    char tftp_server_name[256];    // DHCP option 66 (empty means use global)
+    char bootfile_name[256];       // DHCP option 67 (empty means use global)
+
+    // Lease renewal timers (subnet-level overrides)
+    uint32_t renewal_time;         // DHCP option 58 (0 means use global)
+    uint32_t rebinding_time;       // DHCP option 59 (0 means use global)
 
     // Host reservation
     struct dhcp_host_reservation_t hosts[MAX_HOSTS_PER_SUBNET];
