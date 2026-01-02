@@ -23,6 +23,13 @@ struct dhcp_global_options_t
     uint32_t ping_timeout;      // in seconds
     char ddns_update_style[32]; // DHCP or NONE
 
+    // Global time and server options (can be overridden per subnet)
+    struct in_addr ntp_servers[MAX_NTP_SERVERS];       // DHCP option 42 - NTP servers
+    uint32_t ntp_server_count;                         // number of NTP servers
+    struct in_addr netbios_servers[MAX_NTP_SERVERS];   // DHCP option 44 - NetBIOS name servers
+    uint32_t netbios_server_count;                     // number of NetBIOS servers
+    int32_t time_offset;                               // DHCP option 2 - Time offset from UTC (seconds)
+
     // PXE Boot support (network booting)
     struct in_addr next_server;    // Boot server IP address
     char filename[256];            // Boot file name (e.g., "pxelinux.0")
@@ -35,7 +42,7 @@ struct dhcp_global_options_t
 
     // Server behavior control
     bool allow_unknown_clients;    // Allow clients without reservations (default: true)
-    bool allow_bootp;              // Allow BOOTP requests (default: true)
+    bool allow_bootp;              // Allow BOOTP requests (default: false)
 };
 
 struct dhcp_host_reservation_t

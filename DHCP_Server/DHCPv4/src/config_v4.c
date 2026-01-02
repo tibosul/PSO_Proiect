@@ -36,6 +36,21 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
             {
                 global->dns_server_count = parse_ip_list(opt_value, global->dns_servers, MAX_DNS_SERVERS);
             }
+            else if (strcmp(opt_name, "ntp-servers") == 0)
+            {
+                // DHCP option 42 - NTP servers
+                global->ntp_server_count = parse_ip_list(opt_value, global->ntp_servers, MAX_NTP_SERVERS);
+            }
+            else if (strcmp(opt_name, "netbios-name-servers") == 0)
+            {
+                // DHCP option 44 - NetBIOS name servers
+                global->netbios_server_count = parse_ip_list(opt_value, global->netbios_servers, MAX_NTP_SERVERS);
+            }
+            else if (strcmp(opt_name, "time-offset") == 0)
+            {
+                // DHCP option 2 - Time offset from UTC (in seconds)
+                global->time_offset = atoi(opt_value);
+            }
             else if (strcmp(opt_name, "tftp-server-name") == 0)
             {
                 // DHCP option 66 - TFTP server name or IP
@@ -359,6 +374,7 @@ int parse_config_file(const char *filename, struct dhcp_config_t *config)
     }
 
     memset(config, 0, sizeof(struct dhcp_config_t));
+    config->global.allow_unknown_clients = true; // Default
 
     char line[MAX_LINE_LEN];
     while (fgets(line, sizeof(line), fp))
