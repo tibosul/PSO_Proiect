@@ -13,7 +13,7 @@
  * @param len Output length of parsed client ID
  * @return 0 on success, -1 on failure
  */
-int parse_client_id_from_string(const char* str, uint8_t* client_id, uint32_t* len);
+int parse_client_id_from_string(const char *str, uint8_t *client_id, uint32_t *len);
 
 /**
  * @brief Format client ID to ISC DHCP octal-escaped string format
@@ -22,6 +22,6 @@ int parse_client_id_from_string(const char* str, uint8_t* client_id, uint32_t* l
  * @param output Output string buffer
  * @param output_len Size of output buffer
  */
-void format_client_id_to_string(const uint8_t* client_id, uint32_t len, char* output, size_t output_len);
+void format_client_id_to_string(const uint8_t *client_id, uint32_t len, char *output, size_t output_len);
 
 #endif // ENCODING_UTILS_H

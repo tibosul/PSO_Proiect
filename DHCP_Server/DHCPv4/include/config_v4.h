@@ -16,11 +16,11 @@ struct dhcp_global_options_t
 {
     bool authoritative;
     uint32_t default_lease_time; // in seconds
-    uint32_t max_lease_time; // in seconds
+    uint32_t max_lease_time;     // in seconds
     struct in_addr dns_servers[MAX_DNS_SERVERS];
-    uint32_t dns_server_count; // number of DNS servers
-    bool ping_check; // whether to ping the client before giving an address
-    uint32_t ping_timeout; // in seconds
+    uint32_t dns_server_count;  // number of DNS servers
+    bool ping_check;            // whether to ping the client before giving an address
+    uint32_t ping_timeout;      // in seconds
     char ddns_update_style[32]; // DHCP or NONE
 };
 
@@ -54,7 +54,7 @@ struct dhcp_subnet_t
 
     // Subnet-specific lease times (optional overrides)
     uint32_t default_lease_time; // 0 means use global
-    uint32_t max_lease_time; // 0 means use global
+    uint32_t max_lease_time;     // 0 means use global
 
     // Host reservation
     struct dhcp_host_reservation_t hosts[MAX_HOSTS_PER_SUBNET];
@@ -68,16 +68,13 @@ struct dhcp_config_t
     uint32_t subnet_count;
 };
 
-int parse_config_file(const char* filename, struct dhcp_config_t* config);
-void free_config(struct dhcp_config_t* config);
-void print_config(const struct dhcp_config_t* config);
+int parse_config_file(const char *filename, struct dhcp_config_t *config);
+void free_config(struct dhcp_config_t *config);
+void print_config(const struct dhcp_config_t *config);
 
-int parse_ip_address(const char* str, struct in_addr* addr);
-int parse_mac_address(const char* str, uint8_t mac[6]);
-struct dhcp_subnet_t* find_subnet_for_ip(struct dhcp_config_t* config, struct in_addr ip);
-struct dhcp_host_reservation_t* find_host_by_mac(struct dhcp_subnet_t* subnet, const uint8_t mac[6]);
-
-
-
+int parse_ip_address(const char *str, struct in_addr *addr);
+int parse_mac_address(const char *str, uint8_t mac[6]);
+struct dhcp_subnet_t *find_subnet_for_ip(struct dhcp_config_t *config, struct in_addr ip);
+struct dhcp_host_reservation_t *find_host_by_mac(struct dhcp_subnet_t *subnet, const uint8_t mac[6]);
 
 #endif // CONFIG_V4_H

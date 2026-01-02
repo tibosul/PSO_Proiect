@@ -10,7 +10,7 @@
  * @param addr Output in_addr structure
  * @return 0 on success, -1 on failure
  */
-int parse_ip_address(const char* str, struct in_addr* addr);
+int parse_ip_address(const char *str, struct in_addr *addr);
 
 /**
  * @brief Parse a MAC address string to byte array
@@ -18,7 +18,7 @@ int parse_ip_address(const char* str, struct in_addr* addr);
  * @param mac Output MAC address array (6 bytes)
  * @return 0 on success, -1 on failure
  */
-int parse_mac_address(const char* str, uint8_t mac[6]);
+int parse_mac_address(const char *str, uint8_t mac[6]);
 
 /**
  * @brief Format a MAC address from byte array to string
@@ -26,7 +26,7 @@ int parse_mac_address(const char* str, uint8_t mac[6]);
  * @param output Output string buffer
  * @param output_len Size of output buffer
  */
-void format_mac_address(const uint8_t mac[6], char* output, size_t output_len);
+void format_mac_address(const uint8_t mac[6], char *output, size_t output_len);
 
 /**
  * @brief Parse a comma-separated list of IP addresses
@@ -35,6 +35,6 @@ void format_mac_address(const uint8_t mac[6], char* output, size_t output_len);
  * @param max_count Maximum number of addresses to parse
  * @return Number of addresses successfully parsed
  */
-int parse_ip_list(const char* str, struct in_addr* addrs, int max_count);
+int parse_ip_list(const char *str, struct in_addr *addrs, int max_count);
 
 #endif // NETWORK_UTILS_H

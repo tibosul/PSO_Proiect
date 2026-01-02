@@ -15,74 +15,92 @@
 
 #define MAX_LINE_LEN 1024
 
-const char* lease_state_to_string(lease_state_t state)
+const char *lease_state_to_string(lease_state_t state)
 {
-    switch(state)
+    switch (state)
     {
-        case LEASE_STATE_FREE: return "free";
-        case LEASE_STATE_ACTIVE: return "active";
-        case LEASE_STATE_EXPIRED: return "expired";
-        case LEASE_STATE_RELEASED: return "released";
-        case LEASE_STATE_ABANDONED: return "abandoned";
-        case LEASE_STATE_RESERVED: return "reserved";
-        case LEASE_STATE_BACKUP: return "backup";
-        default: return "unknown";
+    case LEASE_STATE_FREE:
+        return "free";
+    case LEASE_STATE_ACTIVE:
+        return "active";
+    case LEASE_STATE_EXPIRED:
+        return "expired";
+    case LEASE_STATE_RELEASED:
+        return "released";
+    case LEASE_STATE_ABANDONED:
+        return "abandoned";
+    case LEASE_STATE_RESERVED:
+        return "reserved";
+    case LEASE_STATE_BACKUP:
+        return "backup";
+    default:
+        return "unknown";
     }
 }
 
-lease_state_t lease_state_from_string(const char* str)
+lease_state_t lease_state_from_string(const char *str)
 {
-    if(strcmp(str, "free") == 0) return LEASE_STATE_FREE;
-    if(strcmp(str, "active") == 0) return LEASE_STATE_ACTIVE;
-    if(strcmp(str, "expired") == 0) return LEASE_STATE_EXPIRED;
-    if(strcmp(str, "released") == 0) return LEASE_STATE_RELEASED;
-    if(strcmp(str, "abandoned") == 0) return LEASE_STATE_ABANDONED;
-    if(strcmp(str, "reserved") == 0) return LEASE_STATE_RESERVED;
-    if(strcmp(str, "backup") == 0) return LEASE_STATE_BACKUP;
+    if (strcmp(str, "free") == 0)
+        return LEASE_STATE_FREE;
+    if (strcmp(str, "active") == 0)
+        return LEASE_STATE_ACTIVE;
+    if (strcmp(str, "expired") == 0)
+        return LEASE_STATE_EXPIRED;
+    if (strcmp(str, "released") == 0)
+        return LEASE_STATE_RELEASED;
+    if (strcmp(str, "abandoned") == 0)
+        return LEASE_STATE_ABANDONED;
+    if (strcmp(str, "reserved") == 0)
+        return LEASE_STATE_RESERVED;
+    if (strcmp(str, "backup") == 0)
+        return LEASE_STATE_BACKUP;
 
     return LEASE_STATE_UNKNOWN;
 }
 
-bool lease_is_expired(const struct dhcp_lease_t* lease)
+bool lease_is_expired(const struct dhcp_lease_t *lease)
 {
     time_t now = time(NULL);
     return (lease->state == LEASE_STATE_ACTIVE && lease->end_time < now);
 }
 
-int lease_db_init(struct lease_database_t* db, const char* filename)
+int lease_db_init(struct lease_database_t *db, const char *filename)
 {
-    if(!db || !filename) return -1;
+    if (!db || !filename)
+        return -1;
 
     memset(db, 0, sizeof(struct lease_database_t));
     strncpy(db->filename, filename, sizeof(db->filename) - 1);
-    db->next_lease_id = 1;  // Start at 1 (0 = "no lease")
+    db->next_lease_id = 1; // Start at 1 (0 = "no lease")
 
     return 0;
 }
 
-void lease_db_free(struct lease_database_t* db)
+void lease_db_free(struct lease_database_t *db)
 {
-    if(db)
+    if (db)
     {
         memset(db, 0, sizeof(struct lease_database_t));
     }
 }
 
 // Generate next unique lease ID
-uint64_t lease_db_generate_id(struct lease_database_t* db)
+uint64_t lease_db_generate_id(struct lease_database_t *db)
 {
-    if(!db) return 0;
+    if (!db)
+        return 0;
     return db->next_lease_id++;
 }
 
 // Find lease by ID (stable reference)
-struct dhcp_lease_t* lease_db_find_by_id(struct lease_database_t* db, uint64_t lease_id)
+struct dhcp_lease_t *lease_db_find_by_id(struct lease_database_t *db, uint64_t lease_id)
 {
-    if(!db || lease_id == 0) return NULL;
+    if (!db || lease_id == 0)
+        return NULL;
 
-    for(uint32_t i = 0; i < db->lease_count; i++)
+    for (uint32_t i = 0; i < db->lease_count; i++)
     {
-        if(db->leases[i].lease_id == lease_id)
+        if (db->leases[i].lease_id == lease_id)
         {
             return &db->leases[i];
         }
@@ -90,16 +108,17 @@ struct dhcp_lease_t* lease_db_find_by_id(struct lease_database_t* db, uint64_t l
     return NULL;
 }
 
-static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_line)
+static int parse_lease_block(FILE *fp, struct dhcp_lease_t *lease, char *first_line)
 {
     memset(lease, 0, sizeof(struct dhcp_lease_t));
 
     // Parse "lease x.x.x.x {"
-    char* token = strtok(first_line, " \t{");
-    if(!token || strcmp(token, "lease") != 0) return -1;
+    char *token = strtok(first_line, " \t{");
+    if (!token || strcmp(token, "lease") != 0)
+        return -1;
 
-    char* ip_str = strtok(NULL, " \t{");
-    if(!ip_str || inet_pton(AF_INET, ip_str, &lease->ip_address) != 1)
+    char *ip_str = strtok(NULL, " \t{");
+    if (!ip_str || inet_pton(AF_INET, ip_str, &lease->ip_address) != 1)
     {
         return -1;
     }
@@ -110,73 +129,75 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
     lease->rewind_binding_state = LEASE_STATE_FREE;
 
     char line[MAX_LINE_LEN];
-    while(fgets(line, sizeof(line), fp))
+    while (fgets(line, sizeof(line), fp))
     {
-        char* trimmed = trim(line);
+        char *trimmed = trim(line);
 
         // Skip empty lines and comments
-        if(strlen(trimmed) == 0 || trimmed[0] == '#') continue;
-        if(trimmed[0] == '}')
+        if (strlen(trimmed) == 0 || trimmed[0] == '#')
+            continue;
+        if (trimmed[0] == '}')
         {
             return 0;
         }
 
-        char* key = strtok(trimmed, " \t");
-        if(!key) continue;
+        char *key = strtok(trimmed, " \t");
+        if (!key)
+            continue;
 
-        if(strcmp(key, "starts") == 0)
+        if (strcmp(key, "starts") == 0)
         {
-            char* value = strtok(NULL, ";");
-            if(value)
+            char *value = strtok(NULL, ";");
+            if (value)
             {
                 lease->start_time = parse_lease_time(trim(value));
             }
         }
-        else if(strcmp(key, "ends") == 0)
+        else if (strcmp(key, "ends") == 0)
         {
-            char* value = strtok(NULL, ";");
-            if(value)
+            char *value = strtok(NULL, ";");
+            if (value)
             {
                 lease->end_time = parse_lease_time(trim(value));
             }
         }
-        else if(strcmp(key, "tstp") == 0)
+        else if (strcmp(key, "tstp") == 0)
         {
-            char* value = strtok(NULL, ";");
-            if(value)
+            char *value = strtok(NULL, ";");
+            if (value)
             {
                 lease->tstp = parse_lease_time(trim(value));
             }
         }
-        else if(strcmp(key, "cltt") == 0)
+        else if (strcmp(key, "cltt") == 0)
         {
-            char* value = strtok(NULL, ";");
-            if(value)
+            char *value = strtok(NULL, ";");
+            if (value)
             {
                 lease->cltt = parse_lease_time(trim(value));
             }
         }
-        else if(strcmp(key, "hardware") == 0)
+        else if (strcmp(key, "hardware") == 0)
         {
             strtok(NULL, " \t"); // Skip hardware type (e.g., "ethernet")
-            char* mac_str = strtok(NULL, ";");
-            if(mac_str)
+            char *mac_str = strtok(NULL, ";");
+            if (mac_str)
             {
                 parse_mac_address(trim(mac_str), lease->mac_address);
             }
         }
-        else if(strcmp(key, "uid") == 0)
+        else if (strcmp(key, "uid") == 0)
         {
-            char* uid_str = strtok(NULL, ";");
-            if(uid_str)
+            char *uid_str = strtok(NULL, ";");
+            if (uid_str)
             {
                 parse_client_id_from_string(trim(uid_str), lease->client_id, &lease->client_id_len);
             }
         }
-        else if(strcmp(key, "client-hostname") == 0)
+        else if (strcmp(key, "client-hostname") == 0)
         {
-            char* hostname = strtok(NULL, ";");
-            if(hostname)
+            char *hostname = strtok(NULL, ";");
+            if (hostname)
             {
                 hostname = trim(hostname);
 
@@ -185,10 +206,10 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
                 strncpy(lease->client_hostname, hostname, MAX_CLIENT_HOSTNAME - 1);
             }
         }
-        else if(strcmp(key, "vendor-class-identifier") == 0)
+        else if (strcmp(key, "vendor-class-identifier") == 0)
         {
-            char* vendor = strtok(NULL, ";");
-            if(vendor)
+            char *vendor = strtok(NULL, ";");
+            if (vendor)
             {
                 vendor = trim(vendor);
 
@@ -197,29 +218,30 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
                 strncpy(lease->vendor_class_identifier, vendor, MAX_VENDOR_CLASS_LEN - 1);
             }
         }
-        else if(strcmp(key, "set") == 0)
+        else if (strcmp(key, "set") == 0)
         {
             // Parse "set lease-id = "123";"
-            char* var_name = strtok(NULL, " \t=");
-            if(var_name && strcmp(trim(var_name), "lease-id") == 0)
+            char *var_name = strtok(NULL, " \t=");
+            if (var_name && strcmp(trim(var_name), "lease-id") == 0)
             {
-                char* value = strtok(NULL, ";\"");
-                if(value)
+                char *value = strtok(NULL, ";\"");
+                if (value)
                 {
                     value = trim(value);
                     // Remove quotes if present
-                    if(value[0] == '"') value++;
+                    if (value[0] == '"')
+                        value++;
                     lease->lease_id = (uint64_t)strtoull(value, NULL, 10);
                 }
             }
         }
-        else if(strcmp(key, "binding") == 0)
+        else if (strcmp(key, "binding") == 0)
         {
-            char* binding_key = strtok(NULL, " \t");
-            if(binding_key && strcmp(binding_key, "state") == 0)
+            char *binding_key = strtok(NULL, " \t");
+            if (binding_key && strcmp(binding_key, "state") == 0)
             {
-                char* state_str = strtok(NULL, ";");
-                if(state_str)
+                char *state_str = strtok(NULL, ";");
+                if (state_str)
                 {
                     state_str = trim(state_str);
                     lease->state = lease_state_from_string(state_str);
@@ -227,43 +249,43 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
                 }
             }
         }
-        else if(strcmp(key, "next") == 0)
+        else if (strcmp(key, "next") == 0)
         {
-            char* next_key = strtok(NULL, " \t");
-            if(next_key && strcmp(next_key, "binding") == 0)
+            char *next_key = strtok(NULL, " \t");
+            if (next_key && strcmp(next_key, "binding") == 0)
             {
-                char* state_key = strtok(NULL, " \t");
-                if(state_key && strcmp(state_key, "state") == 0)
+                char *state_key = strtok(NULL, " \t");
+                if (state_key && strcmp(state_key, "state") == 0)
                 {
-                    char* state_str = strtok(NULL, ";");
-                    if(state_str)
+                    char *state_str = strtok(NULL, ";");
+                    if (state_str)
                     {
                         lease->next_binding_state = lease_state_from_string(trim(state_str));
                     }
                 }
             }
         }
-        else if(strcmp(key, "rewind") == 0)
+        else if (strcmp(key, "rewind") == 0)
         {
-            char* rewind_key = strtok(NULL, " \t");
-            if(rewind_key && strcmp(rewind_key, "binding") == 0)
+            char *rewind_key = strtok(NULL, " \t");
+            if (rewind_key && strcmp(rewind_key, "binding") == 0)
             {
-                char* state_key = strtok(NULL, " \t");
-                if(state_key && strcmp(state_key, "state") == 0)
+                char *state_key = strtok(NULL, " \t");
+                if (state_key && strcmp(state_key, "state") == 0)
                 {
-                    char* state_str = strtok(NULL, ";");
-                    if(state_str)
+                    char *state_str = strtok(NULL, ";");
+                    if (state_str)
                     {
                         lease->rewind_binding_state = lease_state_from_string(trim(state_str));
                     }
                 }
             }
         }
-        else if(strcmp(key, "abandoned;") == 0 || strcmp(key, "abandoned") == 0)
+        else if (strcmp(key, "abandoned;") == 0 || strcmp(key, "abandoned") == 0)
         {
             lease->is_abandoned = true;
         }
-        else if(strcmp(key, "set") == 0)
+        else if (strcmp(key, "set") == 0)
         {
             // Parse vendor-specific options like: set vendor-string = "Cisco";
             // For now, we'll skip these
@@ -273,45 +295,47 @@ static int parse_lease_block(FILE* fp, struct dhcp_lease_t* lease, char* first_l
     return -1;
 }
 
-int lease_db_load(struct lease_database_t* db)
+int lease_db_load(struct lease_database_t *db)
 {
-    if(!db) return -1;
+    if (!db)
+        return -1;
 
-    FILE* fp = fopen(db->filename, "r");
-    if(!fp)
+    FILE *fp = fopen(db->filename, "r");
+    if (!fp)
     {
         printf("Lease file %s not found, starting with empty database\n", db->filename);
-        db->next_lease_id = 1;  // Initialize
+        db->next_lease_id = 1; // Initialize
         return 0;
     }
 
     db->lease_count = 0;
-    db->next_lease_id = 1;  // Will be updated
+    db->next_lease_id = 1; // Will be updated
 
     char line[MAX_LINE_LEN];
-    while(fgets(line, sizeof(line), fp))
+    while (fgets(line, sizeof(line), fp))
     {
-        char* trimmed = trim(line);
+        char *trimmed = trim(line);
 
         // Skip empty lines and comments
-        if(strlen(trimmed) == 0 || trimmed[0] == '#') continue;
+        if (strlen(trimmed) == 0 || trimmed[0] == '#')
+            continue;
 
         // Look for lease blocks
-        if(strncmp(trimmed, "lease", 5) == 0)
+        if (strncmp(trimmed, "lease", 5) == 0)
         {
-            if(db->lease_count < MAX_LEASES)
+            if (db->lease_count < MAX_LEASES)
             {
-                if(parse_lease_block(fp, &db->leases[db->lease_count], trimmed) == 0)
+                if (parse_lease_block(fp, &db->leases[db->lease_count], trimmed) == 0)
                 {
                     // Generate ID if not present in file (backward compatibility)
-                    if(db->leases[db->lease_count].lease_id == 0)
+                    if (db->leases[db->lease_count].lease_id == 0)
                     {
                         db->leases[db->lease_count].lease_id = lease_db_generate_id(db);
                     }
                     else
                     {
                         // Update next_lease_id to be higher than any existing
-                        if(db->leases[db->lease_count].lease_id >= db->next_lease_id)
+                        if (db->leases[db->lease_count].lease_id >= db->next_lease_id)
                         {
                             db->next_lease_id = db->leases[db->lease_count].lease_id + 1;
                         }
@@ -329,12 +353,13 @@ int lease_db_load(struct lease_database_t* db)
     return 0;
 }
 
-int lease_db_save(struct lease_database_t* db)
+int lease_db_save(struct lease_database_t *db)
 {
-    if(!db) return -1;
+    if (!db)
+        return -1;
 
-    FILE* fp = fopen(db->filename, "w");
-    if(!fp)
+    FILE *fp = fopen(db->filename, "w");
+    if (!fp)
     {
         perror("Failed to open lease file for writing");
         return -1;
@@ -373,9 +398,9 @@ int lease_db_save(struct lease_database_t* db)
     fprintf(fp, "# Last updated: %s\n", ctime(&now));
 
     // Write all leases
-    for(uint32_t i = 0; i < db->lease_count; i++)
+    for (uint32_t i = 0; i < db->lease_count; i++)
     {
-        struct dhcp_lease_t* lease = &db->leases[i];
+        struct dhcp_lease_t *lease = &db->leases[i];
         char ip_str[INET_ADDRSTRLEN];
         char time_buf[64];
 
@@ -384,7 +409,7 @@ int lease_db_save(struct lease_database_t* db)
         fprintf(fp, "\nlease %s {\n", ip_str);
 
         // Write lease ID as custom field (ISC DHCP compatible)
-        if(lease->lease_id > 0)
+        if (lease->lease_id > 0)
         {
             fprintf(fp, "\t# Lease ID (custom field)\n");
             fprintf(fp, "\tset lease-id = \"%lu\";\n", lease->lease_id);
@@ -397,13 +422,13 @@ int lease_db_save(struct lease_database_t* db)
         format_lease_time(lease->end_time, time_buf, sizeof(time_buf));
         fprintf(fp, "\tends %s;\n", time_buf);
 
-        if(lease->tstp > 0)
+        if (lease->tstp > 0)
         {
             format_lease_time(lease->tstp, time_buf, sizeof(time_buf));
             fprintf(fp, "\ttstp %s;\n", time_buf);
         }
 
-        if(lease->cltt > 0)
+        if (lease->cltt > 0)
         {
             format_lease_time(lease->cltt, time_buf, sizeof(time_buf));
             fprintf(fp, "\tcltt %s;\n", time_buf);
@@ -412,12 +437,12 @@ int lease_db_save(struct lease_database_t* db)
         // Write binding states
         fprintf(fp, "\tbinding state %s;\n", lease_state_to_string(lease->state));
 
-        if(lease->next_binding_state != LEASE_STATE_FREE)
+        if (lease->next_binding_state != LEASE_STATE_FREE)
         {
             fprintf(fp, "\tnext binding state %s;\n", lease_state_to_string(lease->next_binding_state));
         }
 
-        if(lease->rewind_binding_state != LEASE_STATE_FREE)
+        if (lease->rewind_binding_state != LEASE_STATE_FREE)
         {
             fprintf(fp, "\trewind binding state %s;\n", lease_state_to_string(lease->rewind_binding_state));
         }
@@ -428,29 +453,29 @@ int lease_db_save(struct lease_database_t* db)
                 lease->mac_address[3], lease->mac_address[4], lease->mac_address[5]);
 
         // Write client ID if present
-        if(lease->client_id_len > 0)
+        if (lease->client_id_len > 0)
         {
             char uid_str[256];
             format_client_id_to_string(lease->client_id, lease->client_id_len,
-                                      uid_str, sizeof(uid_str));
+                                       uid_str, sizeof(uid_str));
             fprintf(fp, "\tuid %s;\n", uid_str);
         }
 
         // Write hostname if present
-        if(strlen(lease->client_hostname) > 0)
+        if (strlen(lease->client_hostname) > 0)
         {
             fprintf(fp, "\tclient-hostname \"%s\";\n", lease->client_hostname);
         }
 
         // Write vendor class identifier if present
-        if(strlen(lease->vendor_class_identifier) > 0)
+        if (strlen(lease->vendor_class_identifier) > 0)
         {
             fprintf(fp, "\tvendor-class-identifier \"%s\";\n",
-                   lease->vendor_class_identifier);
+                    lease->vendor_class_identifier);
         }
 
         // Write abandoned flag if set
-        if(lease->is_abandoned)
+        if (lease->is_abandoned)
         {
             fprintf(fp, "\tabandoned;\n");
         }
@@ -462,12 +487,13 @@ int lease_db_save(struct lease_database_t* db)
     return 0;
 }
 
-int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t* lease)
+int lease_db_append_lease(struct lease_database_t *db, const struct dhcp_lease_t *lease)
 {
-    if(!db || !lease) return -1;
+    if (!db || !lease)
+        return -1;
 
-    FILE* fp = fopen(db->filename, "a");
-    if(!fp)
+    FILE *fp = fopen(db->filename, "a");
+    if (!fp)
     {
         perror("Failed to open lease file for appending\n");
         return -1;
@@ -481,7 +507,7 @@ int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t
     fprintf(fp, "\nlease %s {\n", ip_str);
 
     // Write lease ID as custom field (ISC DHCP compatible)
-    if(lease->lease_id > 0)
+    if (lease->lease_id > 0)
     {
         fprintf(fp, "\t# Lease ID (custom field)\n");
         fprintf(fp, "\tset lease-id = \"%lu\";\n", lease->lease_id);
@@ -494,13 +520,13 @@ int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t
     format_lease_time(lease->end_time, time_buf, sizeof(time_buf));
     fprintf(fp, "\tends %s;\n", time_buf);
 
-    if(lease->tstp > 0)
+    if (lease->tstp > 0)
     {
         format_lease_time(lease->tstp, time_buf, sizeof(time_buf));
         fprintf(fp, "\ttstp %s;\n", time_buf);
     }
 
-    if(lease->cltt > 0)
+    if (lease->cltt > 0)
     {
         format_lease_time(lease->cltt, time_buf, sizeof(time_buf));
         fprintf(fp, "\tcltt %s;\n", time_buf);
@@ -509,12 +535,12 @@ int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t
     // Write binding states
     fprintf(fp, "\tbinding state %s;\n", lease_state_to_string(lease->state));
 
-    if(lease->next_binding_state != LEASE_STATE_FREE)
+    if (lease->next_binding_state != LEASE_STATE_FREE)
     {
         fprintf(fp, "\tnext binding state %s;\n", lease_state_to_string(lease->next_binding_state));
     }
 
-    if(lease->rewind_binding_state != LEASE_STATE_FREE)
+    if (lease->rewind_binding_state != LEASE_STATE_FREE)
     {
         fprintf(fp, "\trewind binding state %s;\n", lease_state_to_string(lease->rewind_binding_state));
     }
@@ -525,7 +551,7 @@ int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t
             lease->mac_address[3], lease->mac_address[4], lease->mac_address[5]);
 
     // Write client ID if present
-    if(lease->client_id_len > 0)
+    if (lease->client_id_len > 0)
     {
         char uid_str[256];
         format_client_id_to_string(lease->client_id, lease->client_id_len, uid_str, sizeof(uid_str));
@@ -533,19 +559,19 @@ int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t
     }
 
     // Write hostname if present
-    if(strlen(lease->client_hostname) > 0)
+    if (strlen(lease->client_hostname) > 0)
     {
         fprintf(fp, "\tclient-hostname \"%s\";\n", lease->client_hostname);
     }
 
     // Write vendor class identifier if present
-    if(strlen(lease->vendor_class_identifier) > 0)
+    if (strlen(lease->vendor_class_identifier) > 0)
     {
         fprintf(fp, "\tvendor-class-identifier \"%s\";\n", lease->vendor_class_identifier);
     }
 
     // Write abandoned flag if set
-    if(lease->is_abandoned)
+    if (lease->is_abandoned)
     {
         fprintf(fp, "\tabandoned;\n");
     }
@@ -556,11 +582,12 @@ int lease_db_append_lease(struct lease_database_t* db, const struct dhcp_lease_t
     return 0;
 }
 
-struct dhcp_lease_t* lease_db_add_lease(struct lease_database_t* db, struct in_addr ip, const uint8_t mac[6], uint32_t lease_time)
+struct dhcp_lease_t *lease_db_add_lease(struct lease_database_t *db, struct in_addr ip, const uint8_t mac[6], uint32_t lease_time)
 {
-    if(!db || db->lease_count >= MAX_LEASES) return NULL;
+    if (!db || db->lease_count >= MAX_LEASES)
+        return NULL;
 
-    struct dhcp_lease_t* lease = &db->leases[db->lease_count];
+    struct dhcp_lease_t *lease = &db->leases[db->lease_count];
     memset(lease, 0, sizeof(struct dhcp_lease_t));
 
     time_t now = time(NULL);
@@ -575,13 +602,13 @@ struct dhcp_lease_t* lease_db_add_lease(struct lease_database_t* db, struct in_a
     // Timestamps
     lease->start_time = now;
     lease->end_time = now + lease_time;
-    lease->tstp = now;              // Time state was put (initialized now)
-    lease->cltt = now;              // Client last transaction time
+    lease->tstp = now; // Time state was put (initialized now)
+    lease->cltt = now; // Client last transaction time
 
     // State transitions
     lease->state = LEASE_STATE_ACTIVE;
-    lease->next_binding_state = LEASE_STATE_FREE;    // After expiration
-    lease->rewind_binding_state = LEASE_STATE_FREE;  // On failure
+    lease->next_binding_state = LEASE_STATE_FREE;   // After expiration
+    lease->rewind_binding_state = LEASE_STATE_FREE; // On failure
 
     // Update string representation
     strncpy(lease->binding_state, "active", sizeof(lease->binding_state) - 1);
@@ -596,13 +623,14 @@ struct dhcp_lease_t* lease_db_add_lease(struct lease_database_t* db, struct in_a
     return lease;
 }
 
-struct dhcp_lease_t* lease_db_find_by_ip(struct lease_database_t* db, struct in_addr ip)
+struct dhcp_lease_t *lease_db_find_by_ip(struct lease_database_t *db, struct in_addr ip)
 {
-    if(!db) return NULL;
+    if (!db)
+        return NULL;
 
-    for(uint32_t i = 0; i < db->lease_count; i++)
+    for (uint32_t i = 0; i < db->lease_count; i++)
     {
-        if(db->leases[i].ip_address.s_addr == ip.s_addr)
+        if (db->leases[i].ip_address.s_addr == ip.s_addr)
         {
             return &db->leases[i];
         }
@@ -610,13 +638,14 @@ struct dhcp_lease_t* lease_db_find_by_ip(struct lease_database_t* db, struct in_
     return NULL;
 }
 
-struct dhcp_lease_t* lease_db_find_by_mac(struct lease_database_t* db, const uint8_t mac[6])
+struct dhcp_lease_t *lease_db_find_by_mac(struct lease_database_t *db, const uint8_t mac[6])
 {
-    if(!db) return NULL;
+    if (!db)
+        return NULL;
 
-    for(uint32_t i = 0; i < db->lease_count; i++)
+    for (uint32_t i = 0; i < db->lease_count; i++)
     {
-        if(memcmp(db->leases[i].mac_address, mac, 6) == 0)
+        if (memcmp(db->leases[i].mac_address, mac, 6) == 0)
         {
             return &db->leases[i];
         }
@@ -624,17 +653,18 @@ struct dhcp_lease_t* lease_db_find_by_mac(struct lease_database_t* db, const uin
     return NULL;
 }
 
-int lease_db_release_lease(struct lease_database_t* db, struct in_addr ip)
+int lease_db_release_lease(struct lease_database_t *db, struct in_addr ip)
 {
-    struct dhcp_lease_t* lease = lease_db_find_by_ip(db, ip);
-    if(!lease) return -1;
+    struct dhcp_lease_t *lease = lease_db_find_by_ip(db, ip);
+    if (!lease)
+        return -1;
 
     time_t now = time(NULL);
 
     lease->state = LEASE_STATE_RELEASED;
-    lease->end_time = now;     // Mark as ended now
-    lease->tstp = now;         // State changed
-    lease->cltt = now;         // Last transaction
+    lease->end_time = now; // Mark as ended now
+    lease->tstp = now;     // State changed
+    lease->cltt = now;     // Last transaction
 
     // Update string representation
     strncpy(lease->binding_state, "released", sizeof(lease->binding_state) - 1);
@@ -645,17 +675,18 @@ int lease_db_release_lease(struct lease_database_t* db, struct in_addr ip)
 
 int lease_db_renew_lease(struct lease_database_t *db, struct in_addr ip, uint32_t lease_time)
 {
-    struct dhcp_lease_t* lease = lease_db_find_by_ip(db, ip);
-    if(!lease) return -1;
+    struct dhcp_lease_t *lease = lease_db_find_by_ip(db, ip);
+    if (!lease)
+        return -1;
 
     time_t now = time(NULL);
     lease->start_time = now;
     lease->end_time = now + lease_time;
     lease->state = LEASE_STATE_ACTIVE;
-    lease->cltt = now;         // Last transaction
+    lease->cltt = now; // Last transaction
 
     // If this was a renewal from expired/released state, update tstp
-    if(lease->state != LEASE_STATE_ACTIVE)
+    if (lease->state != LEASE_STATE_ACTIVE)
     {
         lease->tstp = now;
     }
@@ -669,24 +700,25 @@ int lease_db_renew_lease(struct lease_database_t *db, struct in_addr ip, uint32_
 
 int lease_db_expire_old_leases(struct lease_database_t *db)
 {
-    if(!db) return -1;
+    if (!db)
+        return -1;
 
     uint32_t expired_count = 0;
     time_t now = time(NULL);
 
-    for(uint32_t i = 0; i < db->lease_count; i++)
+    for (uint32_t i = 0; i < db->lease_count; i++)
     {
-        struct dhcp_lease_t* lease = &db->leases[i];
-        if(lease->state == LEASE_STATE_ACTIVE && lease->end_time < now)
+        struct dhcp_lease_t *lease = &db->leases[i];
+        if (lease->state == LEASE_STATE_ACTIVE && lease->end_time < now)
         {
             lease->state = LEASE_STATE_EXPIRED;
-            lease->tstp = now;  // State changed to expired
+            lease->tstp = now; // State changed to expired
             strncpy(lease->binding_state, "expired", sizeof(lease->binding_state) - 1);
             expired_count++;
         }
     }
 
-    if(expired_count > 0)
+    if (expired_count > 0)
     {
         lease_db_save(db);
     }
@@ -694,18 +726,19 @@ int lease_db_expire_old_leases(struct lease_database_t *db)
     return expired_count;
 }
 
-int lease_db_cleanup_expired(struct lease_database_t* db)
+int lease_db_cleanup_expired(struct lease_database_t *db)
 {
-    if(!db) return -1;
+    if (!db)
+        return -1;
 
     uint32_t removed = 0;
 
     uint32_t i = 0;
-    while(i < db->lease_count)
+    while (i < db->lease_count)
     {
-        struct dhcp_lease_t* lease = &db->leases[i];
+        struct dhcp_lease_t *lease = &db->leases[i];
 
-        if(lease->state == LEASE_STATE_EXPIRED || lease->state == LEASE_STATE_RELEASED)
+        if (lease->state == LEASE_STATE_EXPIRED || lease->state == LEASE_STATE_RELEASED)
         {
             memmove(&db->leases[i], &db->leases[i + 1], (db->lease_count - i - 1) * sizeof(struct dhcp_lease_t));
             db->lease_count--;
@@ -716,8 +749,8 @@ int lease_db_cleanup_expired(struct lease_database_t* db)
             i++;
         }
     }
-    
-    if(removed > 0)
+
+    if (removed > 0)
     {
         lease_db_save(db);
     }
@@ -727,19 +760,20 @@ int lease_db_cleanup_expired(struct lease_database_t* db)
 
 void lease_db_print(const struct lease_database_t *db)
 {
-    if(!db) return;
+    if (!db)
+        return;
 
     printf("--- Lease Database ---\n");
     printf("File: %s\n", db->filename);
     printf("Total Leases: %u\n\n", db->lease_count);
 
-    for(uint32_t i = 0; i < db->lease_count; i++)
+    for (uint32_t i = 0; i < db->lease_count; i++)
     {
         const struct dhcp_lease_t *lease = &db->leases[i];
         char ip_str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &lease->ip_address, ip_str, INET_ADDRSTRLEN);
 
-        printf("Lease %u:\n", i+1);
+        printf("Lease %u:\n", i + 1);
         printf("  IP: %s\n", ip_str);
         printf("  MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
                lease->mac_address[0], lease->mac_address[1], lease->mac_address[2],
@@ -748,27 +782,27 @@ void lease_db_print(const struct lease_database_t *db)
         printf("  Start: %s", ctime(&lease->start_time));
         printf("  End: %s", ctime(&lease->end_time));
 
-        if(strlen(lease->client_hostname) > 0)
+        if (strlen(lease->client_hostname) > 0)
         {
             printf("  Hostname: %s\n", lease->client_hostname);
         }
 
-        if(lease->client_id_len > 0)
+        if (lease->client_id_len > 0)
         {
             printf("  Client ID: ");
-            for(uint32_t j = 0; j < lease->client_id_len; j++)
+            for (uint32_t j = 0; j < lease->client_id_len; j++)
             {
                 printf("%02x", lease->client_id[j]);
             }
             printf("\n");
         }
 
-        if(strlen(lease->vendor_class_identifier) > 0)
+        if (strlen(lease->vendor_class_identifier) > 0)
         {
             printf("  Vendor: %s\n", lease->vendor_class_identifier);
         }
 
-        if(lease_is_expired(lease))
+        if (lease_is_expired(lease))
         {
             printf("  *** EXPIRED ***\n");
         }
@@ -777,48 +811,51 @@ void lease_db_print(const struct lease_database_t *db)
     }
 }
 
-
 //=============================================================================
 // Helper Functions for Extended Lease Information
 //=============================================================================
 
-int lease_set_client_id(struct dhcp_lease_t* lease, const uint8_t* client_id, uint32_t len)
+int lease_set_client_id(struct dhcp_lease_t *lease, const uint8_t *client_id, uint32_t len)
 {
-    if(!lease || !client_id || len > MAX_CLIENT_ID_LEN) return -1;
+    if (!lease || !client_id || len > MAX_CLIENT_ID_LEN)
+        return -1;
 
     memcpy(lease->client_id, client_id, len);
     lease->client_id_len = len;
     return 0;
 }
 
-int lease_set_vendor_class(struct dhcp_lease_t* lease, const char* vendor_class)
+int lease_set_vendor_class(struct dhcp_lease_t *lease, const char *vendor_class)
 {
-    if(!lease || !vendor_class) return -1;
+    if (!lease || !vendor_class)
+        return -1;
 
     strncpy(lease->vendor_class_identifier, vendor_class, MAX_VENDOR_CLASS_LEN - 1);
     lease->vendor_class_identifier[MAX_VENDOR_CLASS_LEN - 1] = '\0';
     return 0;
 }
 
-void lease_update_timestamps(struct dhcp_lease_t* lease, time_t now)
+void lease_update_timestamps(struct dhcp_lease_t *lease, time_t now)
 {
-    if(!lease) return;
+    if (!lease)
+        return;
 
-    lease->cltt = now;  // Client Last Transaction Time
+    lease->cltt = now; // Client Last Transaction Time
     // Note: tstp (Time State was Put) should be updated only when state changes
     // Caller should update tstp when changing state
 }
 
-void lease_set_state_transition(struct dhcp_lease_t* lease, lease_state_t current, lease_state_t next, lease_state_t rewind)
+void lease_set_state_transition(struct dhcp_lease_t *lease, lease_state_t current, lease_state_t next, lease_state_t rewind)
 {
-    if(!lease) return;
+    if (!lease)
+        return;
 
     time_t now = time(NULL);
 
     lease->state = current;
     lease->next_binding_state = next;
     lease->rewind_binding_state = rewind;
-    lease->tstp = now;  // State changed now
+    lease->tstp = now; // State changed now
 
     // Update string representation for file format compatibility
     strncpy(lease->binding_state, lease_state_to_string(current), sizeof(lease->binding_state) - 1);
