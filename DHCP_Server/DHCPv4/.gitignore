@@ -35,3 +35,6 @@ core
 # OS files
 .DS_Store
 Thumbs.db
+
+tests/
+test*

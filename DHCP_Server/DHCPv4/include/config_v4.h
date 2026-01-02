@@ -68,13 +68,41 @@ struct dhcp_config_t
     uint32_t subnet_count;
 };
 
+// -----------------------------------------------------------------
+
+/**
+ * @brief Parse a DHCPv4 configuration file.
+ * @param filename Path to the configuration file.
+ * @param config Pointer to dhcp_config_t structure to populate.
+ * @return 0 on success, -1 on failure.
+ */
 int parse_config_file(const char *filename, struct dhcp_config_t *config);
+
+/** @brief Free memory allocated for the configuration.
+ *  @param config Pointer to dhcp_config_t structure to free.
+ */
 void free_config(struct dhcp_config_t *config);
+
+/**
+ * @brief Print the DHCPv4 configuration to stdout.
+ * @param config Pointer to dhcp_config_t structure to print.
+ */
 void print_config(const struct dhcp_config_t *config);
 
-int parse_ip_address(const char *str, struct in_addr *addr);
-int parse_mac_address(const char *str, uint8_t mac[6]);
-struct dhcp_subnet_t *find_subnet_for_ip(struct dhcp_config_t *config, struct in_addr ip);
-struct dhcp_host_reservation_t *find_host_by_mac(struct dhcp_subnet_t *subnet, const uint8_t mac[6]);
+/**
+ * @brief Find the subnet that contains the given IP address.
+ * @param config Pointer to dhcp_config_t structure.
+ * @param ip IP address to search for.
+ * @return Pointer to dhcp_subnet_t if found, NULL otherwise.
+ */
+struct dhcp_subnet_t *find_subnet_for_ip(const struct dhcp_config_t *config, const struct in_addr ip);
+
+/**
+ * @brief Find a host reservation by MAC address within a subnet.
+ * @param subnet Pointer to dhcp_subnet_t structure.
+ * @param mac MAC address to search for.
+ * @return Pointer to dhcp_host_reservation_t if found, NULL otherwise.
+ */
+struct dhcp_host_reservation_t *find_host_by_mac(const struct dhcp_subnet_t *subnet, const uint8_t mac[6]);
 
 #endif // CONFIG_V4_H

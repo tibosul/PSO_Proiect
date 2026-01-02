@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,7 +56,6 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
     else if (strcmp(key, "ddns-update-style") == 0)
     {
         strncpy(global->ddns_update_style, value, sizeof(global->ddns_update_style) - 1);
-        global->ddns_update_style[sizeof(global->ddns_update_style) - 1] = '\0';
     }
     else if (strcmp(key, "ping-check") == 0)
     {
@@ -285,7 +285,7 @@ int parse_config_file(const char *filename, struct dhcp_config_t *config)
     return 0;
 }
 
-struct dhcp_subnet_t *find_subnet_for_ip(struct dhcp_config_t *config, struct in_addr ip)
+struct dhcp_subnet_t *find_subnet_for_ip(const struct dhcp_config_t *config, const struct in_addr ip)
 {
     for (uint32_t i = 0; i < config->subnet_count; i++)
     {
@@ -301,7 +301,7 @@ struct dhcp_subnet_t *find_subnet_for_ip(struct dhcp_config_t *config, struct in
     return NULL;
 }
 
-struct dhcp_host_reservation_t *find_host_by_mac(struct dhcp_subnet_t *subnet, const uint8_t mac[6])
+struct dhcp_host_reservation_t *find_host_by_mac(const struct dhcp_subnet_t *subnet, const uint8_t mac[6])
 {
     for (uint32_t i = 0; i < subnet->host_count; i++)
     {
