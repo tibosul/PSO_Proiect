@@ -11,6 +11,37 @@
 
 #define MAX_LINE_LEN 1024
 
+const char *ddns_update_style_to_string(ddns_update_style_t style)
+{
+    switch (style)
+    {
+    case DDNS_NONE:
+        return "none";
+    case DDNS_INTERIM:
+        return "interim";
+    case DDNS_STANDARD:
+        return "standard";
+    case DDNS_AD_HOC:
+        return "ad-hoc";
+    default:
+        return "unknown";
+    }
+}
+
+ddns_update_style_t ddns_update_style_from_string(const char *str)
+{
+    if (strcmp(str, "none") == 0)
+        return DDNS_NONE;
+    else if (strcmp(str, "interim") == 0)
+        return DDNS_INTERIM;
+    else if (strcmp(str, "standard") == 0)
+        return DDNS_STANDARD;
+    else if (strcmp(str, "ad-hoc") == 0)
+        return DDNS_AD_HOC;
+    else
+        return DDNS_UNKNOWN; // Default
+}
+
 static int parse_global_option(char *line, struct dhcp_global_options_t *global)
 {
     char *key = strtok(line, " \t;");
@@ -49,7 +80,8 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
             else if (strcmp(opt_name, "time-offset") == 0)
             {
                 // DHCP option 2 - Time offset from UTC (in seconds)
-                global->time_offset = atoi(opt_value);
+                if (parse_uint32(opt_value, (uint32_t *)&global->time_offset) != 0)
+                    return -1;
             }
             else if (strcmp(opt_name, "tftp-server-name") == 0)
             {
@@ -66,12 +98,14 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
             else if (strcmp(opt_name, "dhcp-renewal-time") == 0)
             {
                 // DHCP option 58 (T1) - Renewal time
-                global->renewal_time = atoi(opt_value);
+                if (parse_uint32(opt_value, &global->renewal_time) != 0)
+                    return -1;
             }
             else if (strcmp(opt_name, "dhcp-rebinding-time") == 0)
             {
                 // DHCP option 59 (T2) - Rebinding time
-                global->rebinding_time = atoi(opt_value);
+                if (parse_uint32(opt_value, &global->rebinding_time) != 0)
+                    return -1;
             }
         }
         return 0;
@@ -84,15 +118,17 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
 
     if (strcmp(key, "default-lease-time") == 0)
     {
-        global->default_lease_time = atoi(value);
+        if (parse_uint32(value, &global->default_lease_time) != 0)
+            return -1;
     }
     else if (strcmp(key, "max-lease-time") == 0)
     {
-        global->max_lease_time = atoi(value);
+       if (parse_uint32(value, &global->max_lease_time) != 0)
+            return -1;
     }
     else if (strcmp(key, "ddns-update-style") == 0)
     {
-        strncpy(global->ddns_update_style, value, sizeof(global->ddns_update_style) - 1);
+        global->ddns_update_style = ddns_update_style_from_string(value);
     }
     else if (strcmp(key, "ping-check") == 0)
     {
@@ -100,7 +136,8 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
     }
     else if (strcmp(key, "ping-timeout") == 0)
     {
-        global->ping_timeout = atoi(value);
+        if (parse_uint32(value, &global->ping_timeout) != 0)
+            return -1;
     }
     else if (strcmp(key, "next-server") == 0)
     {
@@ -136,6 +173,10 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
         {
             global->allow_bootp = false;
         }
+    }
+    else if (strcmp(key, "update-conflict-detection") == 0)
+    {
+        global->update_conflict_detection = (strcmp(value, "true") == 0);
     }
 
     return 0;
@@ -187,7 +228,8 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
         }
         else if (strcmp(opt_name, "time-offset") == 0)
         {
-            subnet->time_offset = atoi(opt_value);
+            if (parse_uint32(opt_value, (uint32_t *)&subnet->time_offset) != 0)
+                return -1;
         }
         else if (strcmp(opt_name, "ntp-servers") == 0)
         {
@@ -212,12 +254,14 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
         else if (strcmp(opt_name, "dhcp-renewal-time") == 0)
         {
             // DHCP option 58 (T1) - Renewal time (subnet override)
-            subnet->renewal_time = atoi(opt_value);
+            if (parse_uint32(opt_value, &subnet->renewal_time) != 0)
+                return -1;
         }
         else if (strcmp(opt_name, "dhcp-rebinding-time") == 0)
         {
             // DHCP option 59 (T2) - Rebinding time (subnet override)
-            subnet->rebinding_time = atoi(opt_value);
+            if (parse_uint32(opt_value, &subnet->rebinding_time) != 0)
+                return -1;
         }
     }
     else if (strcmp(token, "default-lease-time") == 0)
@@ -225,7 +269,8 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
         char *value = strtok(NULL, ";");
         if (value)
         {
-            subnet->default_lease_time = atoi(trim(value));
+            if (parse_uint32(trim(value), &subnet->default_lease_time) != 0)
+                return -1;
         }
     }
     else if (strcmp(token, "max-lease-time") == 0)
@@ -233,7 +278,8 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
         char *value = strtok(NULL, ";");
         if (value)
         {
-            subnet->max_lease_time = atoi(trim(value));
+            if (parse_uint32(trim(value), &subnet->max_lease_time) != 0)
+                return -1;
         }
     }
     else if (strcmp(token, "next-server") == 0)
@@ -261,6 +307,9 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
 
 static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet)
 {
+    if (subnet->host_count >= MAX_HOSTS_PER_SUBNET)
+        return -1;
+
     char line[MAX_LINE_LEN];
     struct dhcp_host_reservation_t *host = &subnet->hosts[subnet->host_count];
 
@@ -312,6 +361,9 @@ static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet)
 
 static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *first_line)
 {
+    if (config->subnet_count >= MAX_SUBNETS)
+        return -1;
+    
     struct dhcp_subnet_t *subnet = &config->subnets[config->subnet_count];
     memset(subnet, 0, sizeof(struct dhcp_subnet_t));
 
@@ -361,6 +413,58 @@ static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *firs
         }
     }
 
+    if (subnet->default_lease_time == 0)
+        subnet->default_lease_time = config->global.default_lease_time;
+
+    if (subnet->max_lease_time == 0)
+        subnet->max_lease_time = config->global.max_lease_time;
+
+    // Apply global fallbacks for lease times
+    if (subnet->renewal_time == 0)
+        subnet->renewal_time = config->global.renewal_time;
+
+    if (subnet->rebinding_time == 0)
+        subnet->rebinding_time = config->global.rebinding_time;
+
+    // Apply global fallbacks for PXE boot
+    if (subnet->next_server.s_addr == 0)
+        subnet->next_server = config->global.next_server;
+
+    if (strlen(subnet->filename) == 0)
+        strncpy(subnet->filename, config->global.filename, sizeof(subnet->filename) - 1);
+
+    if (strlen(subnet->tftp_server_name) == 0)
+        strncpy(subnet->tftp_server_name, config->global.tftp_server_name, sizeof(subnet->tftp_server_name) - 1);
+
+    if (strlen(subnet->bootfile_name) == 0)
+        strncpy(subnet->bootfile_name, config->global.bootfile_name, sizeof(subnet->bootfile_name) - 1);
+
+    // Apply global fallbacks for time and server options
+    if (subnet->ntp_server_count == 0 && config->global.ntp_server_count > 0)
+    {
+        memcpy(subnet->ntp_servers, config->global.ntp_servers,
+               config->global.ntp_server_count * sizeof(struct in_addr));
+        subnet->ntp_server_count = config->global.ntp_server_count;
+    }
+
+    if (subnet->netbios_server_count == 0 && config->global.netbios_server_count > 0)
+    {
+        memcpy(subnet->netbios_servers, config->global.netbios_servers,
+               config->global.netbios_server_count * sizeof(struct in_addr));
+        subnet->netbios_server_count = config->global.netbios_server_count;
+    }
+
+    if (subnet->time_offset == 0 && config->global.time_offset != 0)
+        subnet->time_offset = config->global.time_offset;
+
+    // Apply global fallbacks for DNS (if not already set)
+    if (subnet->dns_server_count == 0 && config->global.dns_server_count > 0)
+    {
+        memcpy(subnet->dns_servers, config->global.dns_servers,
+               config->global.dns_server_count * sizeof(struct in_addr));
+        subnet->dns_server_count = config->global.dns_server_count;
+    }
+
     return -1;
 }
 
@@ -375,6 +479,7 @@ int parse_config_file(const char *filename, struct dhcp_config_t *config)
 
     memset(config, 0, sizeof(struct dhcp_config_t));
     config->global.allow_unknown_clients = true; // Default
+    config->global.allow_bootp = true;           // Default
 
     char line[MAX_LINE_LEN];
     while (fgets(line, sizeof(line), fp))
@@ -430,47 +535,236 @@ struct dhcp_host_reservation_t *find_host_by_mac(const struct dhcp_subnet_t *sub
 
 void print_config(const struct dhcp_config_t *config)
 {
-    printf("--- Global Options ---\n");
-    printf("Authoritative: %s\n", config->global.authoritative ? "yes" : "no");
-    printf("Default Lease Time: %u seconds\n", config->global.default_lease_time);
-    printf("Max Lease Time: %u seconds\n", config->global.max_lease_time);
-    printf("DNS Servers: %d\n", config->global.dns_server_count);
+    char ip_str[INET_ADDRSTRLEN];
+
+    printf("╔════════════════════════════════════════════════════════════════╗\n");
+    printf("║                    GLOBAL DHCP OPTIONS                         ║\n");
+    printf("╠════════════════════════════════════════════════════════════════╣\n");
+
+    // Server Behavior
+    printf("  Server Behavior:\n");
+    printf("    Authoritative:          %s\n", config->global.authoritative ? "yes" : "no");
+    printf("    Allow Unknown Clients:  %s\n", config->global.allow_unknown_clients ? "yes" : "no");
+    printf("    Allow BOOTP:            %s\n", config->global.allow_bootp ? "yes" : "no");
+    printf("    Update Conflict Detection: %s\n", config->global.update_conflict_detection ? "yes" : "no");
+    printf("    Ping Check:             %s\n", config->global.ping_check ? "yes" : "no");
+    if (config->global.ping_check)
+        printf("    Ping Timeout:           %u seconds\n", config->global.ping_timeout);
+
+    const char *ddns_style_str = ddns_update_style_to_string(config->global.ddns_update_style);
+
+    printf("    DDNS Update Style:      %s\n", ddns_style_str);
+    printf("\n");
+
+    // Lease Times
+    printf("  Lease Times:\n");
+    printf("    Default Lease Time:     %u seconds (%f hours)\n",
+           config->global.default_lease_time, config->global.default_lease_time / 3600.f);
+    printf("    Max Lease Time:         %u seconds (%f hours)\n",
+           config->global.max_lease_time, config->global.max_lease_time / 3600.f);
+    if (config->global.renewal_time > 0)
+        printf("    Renewal Time (T1):      %u seconds\n", config->global.renewal_time);
+    if (config->global.rebinding_time > 0)
+        printf("    Rebinding Time (T2):    %u seconds\n", config->global.rebinding_time);
+    printf("\n");
+
+    // DNS Servers
+    printf("  DNS Servers (%u):\n", config->global.dns_server_count);
     for (uint32_t i = 0; i < config->global.dns_server_count; i++)
     {
-        char ip_str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &config->global.dns_servers[i], ip_str, INET_ADDRSTRLEN);
-        printf("  - %s\n", ip_str);
+        printf("    [%u] %s\n", i + 1, ip_str);
+    }
+    printf("\n");
+
+    // NTP Servers
+    if (config->global.ntp_server_count > 0)
+    {
+        printf("  NTP Servers (%u):\n", config->global.ntp_server_count);
+        for (uint32_t i = 0; i < config->global.ntp_server_count; i++)
+        {
+            inet_ntop(AF_INET, &config->global.ntp_servers[i], ip_str, INET_ADDRSTRLEN);
+            printf("    [%u] %s\n", i + 1, ip_str);
+        }
+        printf("\n");
     }
 
-    printf("\n--- Subnets (%d) ---\n", config->subnet_count);
+    // NetBIOS Servers
+    if (config->global.netbios_server_count > 0)
+    {
+        printf("  NetBIOS Name Servers (%u):\n", config->global.netbios_server_count);
+        for (uint32_t i = 0; i < config->global.netbios_server_count; i++)
+        {
+            inet_ntop(AF_INET, &config->global.netbios_servers[i], ip_str, INET_ADDRSTRLEN);
+            printf("    [%u] %s\n", i + 1, ip_str);
+        }
+        printf("\n");
+    }
+
+    // Time Offset
+    if (config->global.time_offset != 0)
+    {
+        printf("  Time Offset:              %d seconds (UTC%+f)\n",
+               config->global.time_offset, config->global.time_offset / 3600.f);
+        printf("\n");
+    }
+
+    // PXE Boot
+    if (config->global.next_server.s_addr != 0 || strlen(config->global.filename) > 0)
+    {
+        printf("  PXE Boot Configuration:\n");
+        if (config->global.next_server.s_addr != 0)
+        {
+            inet_ntop(AF_INET, &config->global.next_server, ip_str, INET_ADDRSTRLEN);
+            printf("    Next Server:            %s\n", ip_str);
+        }
+        if (strlen(config->global.filename) > 0)
+            printf("    Filename:               %s\n", config->global.filename);
+        if (strlen(config->global.tftp_server_name) > 0)
+            printf("    TFTP Server Name:       %s\n", config->global.tftp_server_name);
+        if (strlen(config->global.bootfile_name) > 0)
+            printf("    Bootfile Name:          %s\n", config->global.bootfile_name);
+        printf("\n");
+    }
+
+    printf("╔════════════════════════════════════════════════════════════════╗\n");
+    printf("║                    SUBNET CONFIGURATIONS                       ║\n");
+    printf("║                         Total: %-2u                            ║\n", config->subnet_count);
+    printf("╚════════════════════════════════════════════════════════════════╝\n\n");
+
     for (uint32_t i = 0; i < config->subnet_count; i++)
     {
         const struct dhcp_subnet_t *subnet = &config->subnets[i];
-        char ip_str[INET_ADDRSTRLEN];
 
+        printf("┌────────────────────────────────────────────────────────────────┐\n");
         inet_ntop(AF_INET, &subnet->network, ip_str, INET_ADDRSTRLEN);
-        printf("\nSubnet %d: %s\n", i + 1, ip_str);
+        printf("│ Subnet #%u: %s\n", i + 1, ip_str);
+        printf("├────────────────────────────────────────────────────────────────┤\n");
 
+        // Network Configuration
+        printf("  Network:\n");
+        inet_ntop(AF_INET, &subnet->netmask, ip_str, INET_ADDRSTRLEN);
+        printf("    Netmask:                %s\n", ip_str);
         inet_ntop(AF_INET, &subnet->range_start, ip_str, INET_ADDRSTRLEN);
-        printf("  Range Start: %s\n", ip_str);
-
+        printf("    DHCP Range Start:       %s\n", ip_str);
         inet_ntop(AF_INET, &subnet->range_end, ip_str, INET_ADDRSTRLEN);
-        printf("  Range End: %s\n", ip_str);
-
-        printf("  Domain: %s\n", subnet->domain_name);
-        printf("  Host Reservations: %d\n", subnet->host_count);
-
-        for (uint32_t j = 0; j < subnet->host_count; j++)
+        printf("    DHCP Range End:         %s\n", ip_str);
+        if (subnet->router.s_addr != 0)
         {
-            printf("    - %s: %02x:%02x:%02x:%02x:%02x:%02x\n",
-                   subnet->hosts[j].name,
-                   subnet->hosts[j].mac_address[0],
-                   subnet->hosts[j].mac_address[1],
-                   subnet->hosts[j].mac_address[2],
-                   subnet->hosts[j].mac_address[3],
-                   subnet->hosts[j].mac_address[4],
-                   subnet->hosts[j].mac_address[5]);
+            inet_ntop(AF_INET, &subnet->router, ip_str, INET_ADDRSTRLEN);
+            printf("    Default Gateway:        %s\n", ip_str);
         }
+        if (subnet->broadcast.s_addr != 0)
+        {
+            inet_ntop(AF_INET, &subnet->broadcast, ip_str, INET_ADDRSTRLEN);
+            printf("    Broadcast Address:      %s\n", ip_str);
+        }
+        if (subnet->subnet_mask.s_addr != 0)
+        {
+            inet_ntop(AF_INET, &subnet->subnet_mask, ip_str, INET_ADDRSTRLEN);
+            printf("    Subnet Mask (option):   %s\n", ip_str);
+        }
+        if (strlen(subnet->domain_name) > 0)
+            printf("    Domain Name:            %s\n", subnet->domain_name);
+        printf("\n");
+
+        // Lease Times
+        printf("  Lease Configuration:\n");
+        printf("    Default Lease:          %u seconds (%f hours)\n",
+               subnet->default_lease_time, subnet->default_lease_time / 3600.f);
+        printf("    Max Lease:              %u seconds (%f hours)\n",
+               subnet->max_lease_time, subnet->max_lease_time / 3600.f);
+        if (subnet->renewal_time > 0)
+            printf("    Renewal Time (T1):      %u seconds\n", subnet->renewal_time);
+        if (subnet->rebinding_time > 0)
+            printf("    Rebinding Time (T2):    %u seconds\n", subnet->rebinding_time);
+        printf("\n");
+
+        // DNS Servers
+        if (subnet->dns_server_count > 0)
+        {
+            printf("  DNS Servers (%u):\n", subnet->dns_server_count);
+            for (uint32_t j = 0; j < subnet->dns_server_count; j++)
+            {
+                inet_ntop(AF_INET, &subnet->dns_servers[j], ip_str, INET_ADDRSTRLEN);
+                printf("    [%u] %s\n", j + 1, ip_str);
+            }
+            printf("\n");
+        }
+
+        // NTP Servers
+        if (subnet->ntp_server_count > 0)
+        {
+            printf("  NTP Servers (%u):\n", subnet->ntp_server_count);
+            for (uint32_t j = 0; j < subnet->ntp_server_count; j++)
+            {
+                inet_ntop(AF_INET, &subnet->ntp_servers[j], ip_str, INET_ADDRSTRLEN);
+                printf("    [%u] %s\n", j + 1, ip_str);
+            }
+            printf("\n");
+        }
+
+        // NetBIOS Servers
+        if (subnet->netbios_server_count > 0)
+        {
+            printf("  NetBIOS Name Servers (%u):\n", subnet->netbios_server_count);
+            for (uint32_t j = 0; j < subnet->netbios_server_count; j++)
+            {
+                inet_ntop(AF_INET, &subnet->netbios_servers[j], ip_str, INET_ADDRSTRLEN);
+                printf("    [%u] %s\n", j + 1, ip_str);
+            }
+            printf("\n");
+        }
+
+        // Time Offset
+        if (subnet->time_offset != 0)
+        {
+            printf("  Time Offset:              %d seconds (UTC%+f)\n",
+                   subnet->time_offset, subnet->time_offset / 3600.f);
+            printf("\n");
+        }
+
+        // PXE Boot
+        if (subnet->next_server.s_addr != 0 || strlen(subnet->filename) > 0)
+        {
+            printf("  PXE Boot:\n");
+            if (subnet->next_server.s_addr != 0)
+            {
+                inet_ntop(AF_INET, &subnet->next_server, ip_str, INET_ADDRSTRLEN);
+                printf("    Next Server:            %s\n", ip_str);
+            }
+            if (strlen(subnet->filename) > 0)
+                printf("    Filename:               %s\n", subnet->filename);
+            if (strlen(subnet->tftp_server_name) > 0)
+                printf("    TFTP Server:            %s\n", subnet->tftp_server_name);
+            if (strlen(subnet->bootfile_name) > 0)
+                printf("    Bootfile:               %s\n", subnet->bootfile_name);
+            printf("\n");
+        }
+
+        // Host Reservations
+        if (subnet->host_count > 0)
+        {
+            printf("  Host Reservations (%u):\n", subnet->host_count);
+            for (uint32_t j = 0; j < subnet->host_count; j++)
+            {
+                inet_ntop(AF_INET, &subnet->hosts[j].fixed_address, ip_str, INET_ADDRSTRLEN);
+                printf("    [%u] %-20s %s\n", j + 1, subnet->hosts[j].name, ip_str);
+                printf("        MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                       subnet->hosts[j].mac_address[0],
+                       subnet->hosts[j].mac_address[1],
+                       subnet->hosts[j].mac_address[2],
+                       subnet->hosts[j].mac_address[3],
+                       subnet->hosts[j].mac_address[4],
+                       subnet->hosts[j].mac_address[5]);
+                if (strlen(subnet->hosts[j].hostname) > 0)
+                    printf("  Hostname: %s", subnet->hosts[j].hostname);
+                printf("\n");
+            }
+            printf("\n");
+        }
+
+        printf("└────────────────────────────────────────────────────────────────┘\n\n");
     }
 }
 

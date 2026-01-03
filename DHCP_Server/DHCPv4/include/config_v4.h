@@ -9,40 +9,67 @@
 #define MAX_HOSTS_PER_SUBNET 128
 #define MAX_DNS_SERVERS 4
 #define MAX_NTP_SERVERS 4
+#define MAX_NETBIOS_SERVERS 4
 #define MAX_HOSTNAME_LENGTH 256
 #define MAX_DOMAIN_LENGTH 256
 
+typedef enum
+{
+    DDNS_NONE = 0,
+    DDNS_INTERIM,
+    DDNS_STANDARD,
+    DDNS_AD_HOC,
+    DDNS_UNKNOWN
+} ddns_update_style_t;
+
+/**
+ * @brief Convert DDNS update style enum to string.
+ * @param style DDNS update style enumeration value.
+ * @return String representation (e.g., "none", "interim").
+ */
+const char *ddns_update_style_to_string(ddns_update_style_t style);
+
+/**
+ * @brief Convert string to DDNS update style enum.
+ * @param str DDNS style string (e.g., "none", "interim").
+ * @return DDNS update style enumeration value.
+ */
+ddns_update_style_t ddns_update_style_from_string(const char *str);
+
 struct dhcp_global_options_t
 {
-    bool authoritative;
-    uint32_t default_lease_time; // in seconds
-    uint32_t max_lease_time;     // in seconds
-    struct in_addr dns_servers[MAX_DNS_SERVERS];
-    uint32_t dns_server_count;  // number of DNS servers
-    bool ping_check;            // whether to ping the client before giving an address
-    uint32_t ping_timeout;      // in seconds
-    char ddns_update_style[32]; // DHCP or NONE
+    bool authoritative;    // false by default
+    bool ping_check;       // whether to ping the client before giving an address
+    uint32_t ping_timeout; // in seconds
+    ddns_update_style_t ddns_update_style;
 
     // Global time and server options (can be overridden per subnet)
-    struct in_addr ntp_servers[MAX_NTP_SERVERS];       // DHCP option 42 - NTP servers
-    uint32_t ntp_server_count;                         // number of NTP servers
-    struct in_addr netbios_servers[MAX_NTP_SERVERS];   // DHCP option 44 - NetBIOS name servers
-    uint32_t netbios_server_count;                     // number of NetBIOS servers
-    int32_t time_offset;                               // DHCP option 2 - Time offset from UTC (seconds)
+    struct in_addr dns_servers[MAX_DNS_SERVERS];
+    uint32_t dns_server_count;                           // number of DNS servers
+    struct in_addr ntp_servers[MAX_NTP_SERVERS];         // DHCP option 42 - NTP servers
+    uint32_t ntp_server_count;                           // number of NTP servers
+    struct in_addr netbios_servers[MAX_NETBIOS_SERVERS]; // DHCP option 44 - NetBIOS name servers
+    uint32_t netbios_server_count;                       // number of NetBIOS servers
+    int32_t time_offset;                                 // DHCP option 2 - Time offset from UTC (seconds)
+
+    uint32_t default_lease_time; // in seconds
+    uint32_t max_lease_time;     // in seconds
 
     // PXE Boot support (network booting)
-    struct in_addr next_server;    // Boot server IP address
-    char filename[256];            // Boot file name (e.g., "pxelinux.0")
-    char tftp_server_name[256];    // DHCP option 66 - TFTP server name/IP
-    char bootfile_name[256];       // DHCP option 67 - Boot file name
+    struct in_addr next_server; // Boot server IP address
+    char filename[256];         // Boot file name (e.g., "pxelinux.0")
+    char tftp_server_name[256]; // DHCP option 66 - TFTP server name/IP
+    char bootfile_name[256];    // DHCP option 67 - Boot file name
 
     // Lease renewal timers (T1 and T2)
-    uint32_t renewal_time;         // DHCP option 58 (T1) - time until RENEWING state (seconds)
-    uint32_t rebinding_time;       // DHCP option 59 (T2) - time until REBINDING state (seconds)
+    uint32_t renewal_time;   // DHCP option 58 (T1) - time until RENEWING state (seconds)
+    uint32_t rebinding_time; // DHCP option 59 (T2) - time until REBINDING state (seconds)
 
     // Server behavior control
-    bool allow_unknown_clients;    // Allow clients without reservations (default: true)
-    bool allow_bootp;              // Allow BOOTP requests (default: false)
+    bool allow_unknown_clients; // Allow clients without reservations (default: true)
+    bool allow_bootp;           // Allow BOOTP requests (default: true)
+
+    bool update_conflict_detection; // false by default
 };
 
 struct dhcp_host_reservation_t
@@ -65,27 +92,28 @@ struct dhcp_subnet_t
     struct in_addr broadcast;
     struct in_addr subnet_mask;
     char domain_name[MAX_DOMAIN_LENGTH];
+
     struct in_addr dns_servers[MAX_DNS_SERVERS];
     uint32_t dns_server_count;
-    int32_t time_offset;
     struct in_addr ntp_servers[MAX_NTP_SERVERS];
     uint32_t ntp_server_count;
     struct in_addr netbios_servers[MAX_NTP_SERVERS];
     uint32_t netbios_server_count;
+    int32_t time_offset;
 
     // Subnet-specific lease times (optional overrides)
     uint32_t default_lease_time; // 0 means use global
     uint32_t max_lease_time;     // 0 means use global
 
     // PXE Boot support (subnet-level overrides)
-    struct in_addr next_server;    // Boot server IP (0.0.0.0 means use global)
-    char filename[256];            // Boot file name (empty means use global)
-    char tftp_server_name[256];    // DHCP option 66 (empty means use global)
-    char bootfile_name[256];       // DHCP option 67 (empty means use global)
+    struct in_addr next_server; // Boot server IP (0.0.0.0 means use global)
+    char filename[256];         // Boot file name (empty means use global)
+    char tftp_server_name[256]; // DHCP option 66 (empty means use global)
+    char bootfile_name[256];    // DHCP option 67 (empty means use global)
 
     // Lease renewal timers (subnet-level overrides)
-    uint32_t renewal_time;         // DHCP option 58 (0 means use global)
-    uint32_t rebinding_time;       // DHCP option 59 (0 means use global)
+    uint32_t renewal_time;   // DHCP option 58 (0 means use global)
+    uint32_t rebinding_time; // DHCP option 59 (0 means use global)
 
     // Host reservation
     struct dhcp_host_reservation_t hosts[MAX_HOSTS_PER_SUBNET];

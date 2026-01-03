@@ -15,4 +15,12 @@ char *trim(char *str);
  */
 char *remove_quotes(char *str);
 
+/**
+ * @brief Parse an unsigned integer from string
+ * @param str String representation of unsigned integer
+ * @param value Pointer to uint32_t to populate
+ * @return 0 on success, -1 on failure
+ */
+int parse_uint32(const char *str, uint32_t *value);
+
 #endif // STRING_UTILS_H
