@@ -1,7 +1,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <ctype.h>
-#include "../include/encoding_utils.h"
+#include "../include/utils/encoding_utils.h"
 
 int parse_client_id_from_string(const char *str, uint8_t *client_id, uint32_t *len)
 {

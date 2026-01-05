@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
-#include "../include/string_utils.h"
+#include "../include/utils/string_utils.h"
 
 char *trim(char *str)
 {

@@ -5,10 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include "../include/config_v4.h"
-#include "../include/string_utils.h"
-#include "../include/file_utils.h"
-#include "../include/network_utils.h"
+#include "../include/src/config_v4.h"
+#include "../include/utils/string_utils.h"
+#include "../include/utils/file_utils.h"
+#include "../include/utils/network_utils.h"
 
 #define MAX_LINE_LEN 1024
 

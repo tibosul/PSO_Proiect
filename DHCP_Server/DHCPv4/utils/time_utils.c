@@ -1,7 +1,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
-#include "../include/time_utils.h"
+#include "../include/utils/time_utils.h"
 
 time_t parse_lease_time(const char *time_str)
 {

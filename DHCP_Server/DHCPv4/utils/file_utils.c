@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "../include/file_utils.h"
+#include "../include/utils/file_utils.h"
 
 int advance_to_next_closed_brace(FILE *fp)
 {

@@ -9,11 +9,11 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
-#include "../include/lease_v4.h"
-#include "../include/string_utils.h"
-#include "../include/network_utils.h"
-#include "../include/time_utils.h"
-#include "../include/encoding_utils.h"
+#include "../include/src/lease_v4.h"
+#include "../include/utils/string_utils.h"
+#include "../include/utils/network_utils.h"
+#include "../include/utils/time_utils.h"
+#include "../include/utils/encoding_utils.h"
 
 #define MAX_LINE_LEN 1024
 

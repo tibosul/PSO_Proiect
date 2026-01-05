@@ -9,13 +9,13 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "../include/config_v4.h"
-#include "../include/dhcp_common.h"
-#include "../include/dhcp_message.h"
-#include "../include/ip_pool.h"
-#include "../include/lease_v4.h"
-#include "../include/network_utils.h"
-#include "../include/thread_pool.h"
+#include "../include/src/config_v4.h"
+#include "../include/src/dhcp_common.h"
+#include "../include/src/dhcp_message.h"
+#include "../include/src/ip_pool.h"
+#include "../include/src/lease_v4.h"
+#include "../include/utils/network_utils.h"
+#include "../include/utils/thread_pool.h"
 
 // Constants
 #define RECV_BUF_SIZE 1024

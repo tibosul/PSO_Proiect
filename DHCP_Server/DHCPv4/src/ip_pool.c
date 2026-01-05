@@ -10,9 +10,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 // #include <errno.h>
-#include "../include/config_v4.h"
-#include "../include/ip_pool.h"
-#include "../include/lease_v4.h"
+#include "../include/src/config_v4.h"
+#include "../include/src/ip_pool.h"
+#include "../include/src/lease_v4.h"
 #include <sys/time.h>
 
 const char *ip_state_to_string(ip_state_t state) {

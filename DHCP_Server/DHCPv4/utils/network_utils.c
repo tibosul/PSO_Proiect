@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include "../include/network_utils.h"
-#include "../include/string_utils.h"
+#include "../include/utils/network_utils.h"
+#include "../include/utils/string_utils.h"
 
 int parse_ip_address(const char *str, struct in_addr *addr)
 {
