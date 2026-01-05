@@ -37,4 +37,5 @@ core
 Thumbs.db
 
 tests/
-test*test/
+test/
+test*
