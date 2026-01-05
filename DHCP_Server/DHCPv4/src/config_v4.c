@@ -7,24 +7,10 @@
 #include <arpa/inet.h>
 #include "../include/config_v4.h"
 #include "../include/string_utils.h"
+#include "../include/file_utils.h"
 #include "../include/network_utils.h"
 
 #define MAX_LINE_LEN 1024
-
-// Error recovery helpers
-/**
- * @brief Compact subnet array by removing entries marked with errors.
- * @param config Configuration structure containing subnets.
- * @param subnet_errors Array marking which subnets have errors (1 = error, 0 = ok).
- */
-static void compact_subnet_array(struct dhcp_config_t *config, const uint8_t *subnet_errors);
-
-/**
- * @brief Compact host array by removing entries marked with errors.
- * @param subnet Subnet structure containing host reservations.
- * @param host_errors Array marking which hosts have errors (1 = error, 0 = ok).
- */
-static void compact_host_array(struct dhcp_subnet_t *subnet, const uint8_t *host_errors);
 
 /**
  * @brief Parse a DHCPv4 global option line.
@@ -32,7 +18,7 @@ static void compact_host_array(struct dhcp_subnet_t *subnet, const uint8_t *host
  * @param global Pointer to the global options structure to populate.
  * @return 0 on success,
  *         -1 if line or global is NULL,
- *         -2 if parsing fails for the option value
+ *         -2 if parsing fails in any way
  */
 static int parse_global_option(char *line, struct dhcp_global_options_t *global);
 
@@ -42,7 +28,7 @@ static int parse_global_option(char *line, struct dhcp_global_options_t *global)
  * @param subnet Pointer to the subnet structure to populate.
  * @return 0 on success,
  *         -1 if line or subnet is NULL,
- *         -2 if parsing fails for the option value
+ *         -2 if parsing fails in any way
  */
 static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet);
 
@@ -50,30 +36,24 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet);
  * @brief Parse a host reservation block within a subnet.
  * @param fp File pointer to read from.
  * @param subnet Pointer to the subnet structure to populate.
- * @param host_error Pointer to error flag for this host (1 = error, 0 = ok).
- * @return 0 on success,
+ * @return 0 on success (host_count incremented),
  *         -1 if fp or subnet is NULL,
- *         -2 if parsing fails for host options (marked in host_error),
+ *         -2 if parsing fails for host options,
  *         -3 if maximum host count is reached
  */
-static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet, uint8_t *host_error);
+static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet);
 
 /**
  * @brief Parse a subnet block from the configuration file.
  * @param fp File pointer to read from.
  * @param config Pointer to the DHCP configuration structure.
  * @param first_line The first line of the subnet block (already read).
- * @param subnet_error Pointer to error flag for this subnet (1 = error, 0 = ok).
- * @param host_errors Array to track host parsing errors within this subnet.
- * @return 0 on success,
+ * @return 0 on success (subnet_count incremented),
  *         -1 if fp, config, or first_line is NULL,
- *         -2 if parsing fails for subnet parameters or options (marked in subnet_error),
+ *         -2 if parsing fails for subnet parameters or options,
  *         -3 if maximum subnet count is reached
  */
-static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *first_line,
-                              uint8_t *subnet_error, uint8_t *host_errors);
-
-
+static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *first_line);
 
 /**
  * @brief Convert DDNS update style enum to string representation.
@@ -117,61 +97,6 @@ ddns_update_style_t ddns_update_style_from_string(const char *str)
         return DDNS_AD_HOC;
     else
         return DDNS_UNKNOWN;
-}
-
-// Error recovery implementation
-static void compact_host_array(struct dhcp_subnet_t *subnet, const uint8_t *host_errors)
-{
-    if (!subnet || !host_errors)
-        return;
-
-    uint32_t write_idx = 0;
-    for (uint32_t read_idx = 0; read_idx < subnet->host_count; read_idx++)
-    {
-        if (host_errors[read_idx] == 0)  // No error, keep this host
-        {
-            if (write_idx != read_idx)
-            {
-                memcpy(&subnet->hosts[write_idx], &subnet->hosts[read_idx],
-                       sizeof(struct dhcp_host_reservation_t));
-            }
-            write_idx++;
-        }
-        else
-        {
-            fprintf(stderr, "Warning: Removing invalid host reservation '%s' from subnet\n",
-                    subnet->hosts[read_idx].name);
-        }
-    }
-    subnet->host_count = write_idx;
-}
-
-static void compact_subnet_array(struct dhcp_config_t *config, const uint8_t *subnet_errors)
-{
-    if (!config || !subnet_errors)
-        return;
-
-    uint32_t write_idx = 0;
-    char ip_str[INET_ADDRSTRLEN];
-
-    for (uint32_t read_idx = 0; read_idx < config->subnet_count; read_idx++)
-    {
-        if (subnet_errors[read_idx] == 0)  // No error, keep this subnet
-        {
-            if (write_idx != read_idx)
-            {
-                memcpy(&config->subnets[write_idx], &config->subnets[read_idx],
-                       sizeof(struct dhcp_subnet_t));
-            }
-            write_idx++;
-        }
-        else
-        {
-            inet_ntop(AF_INET, &config->subnets[read_idx].network, ip_str, INET_ADDRSTRLEN);
-            fprintf(stderr, "Warning: Removing invalid subnet %s from configuration\n", ip_str);
-        }
-    }
-    config->subnet_count = write_idx;
 }
 
 static int parse_global_option(char *line, struct dhcp_global_options_t *global)
@@ -509,27 +434,24 @@ static int parse_subnet_option(char *line, struct dhcp_subnet_t *subnet)
     return 0;
 }
 
-static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet, uint8_t *host_error)
+static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet)
 {
-    if (!fp || !subnet || !host_error)
+    if (!fp || !subnet)
         return -1;
 
     if (subnet->host_count >= MAX_HOSTS_PER_SUBNET)
         return -3;
 
-    *host_error = 0;  // Initialize to no error
     char line[MAX_LINE_LEN];
     struct dhcp_host_reservation_t *host = &subnet->hosts[subnet->host_count];
-    int found_closing_brace = 0;
 
     while (fgets(line, sizeof(line), fp))
     {
         char *trimmed = trim(line);
         if (!trimmed)
         {
-            *host_error = 1;
             fprintf(stderr, "Warning: trim() failed in host block\n");
-            continue;
+            return -2;
         }
 
         // Ignore empty lines and comments
@@ -538,7 +460,7 @@ static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet, uint8_t *hos
 
         if (strchr(trimmed, '}'))
         {
-            found_closing_brace = 1;
+            subnet->host_count++;
             break;
         }
 
@@ -554,14 +476,13 @@ static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet, uint8_t *hos
                 mac = trim(mac);
                 if (!mac)
                 {
-                    *host_error = 1;
                     fprintf(stderr, "Warning: Invalid MAC address format in host block\n");
-                    continue;
+                    return -2;
                 }
                 if (parse_mac_address(mac, host->mac_address) != 0)
                 {
-                    *host_error = 1;
                     fprintf(stderr, "Warning: Failed to parse MAC address in host block\n");
+                    return -2;
                 }
             }
         }
@@ -573,14 +494,13 @@ static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet, uint8_t *hos
                 ip = trim(ip);
                 if (!ip)
                 {
-                    *host_error = 1;
                     fprintf(stderr, "Warning: Invalid IP address format in host block\n");
-                    continue;
+                    return -2;
                 }
                 if (parse_ip_address(ip, &host->fixed_address) != 0)
                 {
-                    *host_error = 1;
                     fprintf(stderr, "Warning: Failed to parse fixed IP address in host block\n");
+                    return -2;
                 }
             }
         }
@@ -595,16 +515,14 @@ static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet, uint8_t *hos
                     hostname = trim(hostname);
                     if (!hostname)
                     {
-                        *host_error = 1;
                         fprintf(stderr, "Warning: Invalid hostname format in host block\n");
-                        continue;
+                        return -2;
                     }
                     hostname = remove_quotes(hostname);
                     if (!hostname)
                     {
-                        *host_error = 1;
                         fprintf(stderr, "Warning: Failed to remove quotes from hostname\n");
-                        continue;
+                        return -2;
                     }
                     strncpy(host->hostname, hostname, MAX_HOSTNAME_LENGTH - 1);
                 }
@@ -612,28 +530,16 @@ static int parse_host_block(FILE *fp, struct dhcp_subnet_t *subnet, uint8_t *hos
         }
     }
 
-    if (!found_closing_brace)
-    {
-        *host_error = 1;
-        fprintf(stderr, "Warning: Host block missing closing brace\n");
-        return -2;
-    }
-
-    subnet->host_count++;
-    return (*host_error == 0) ? 0 : -2;
+    return 0;
 }
 
-static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *first_line,
-                              uint8_t *subnet_error, uint8_t *host_errors)
+static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *first_line)
 {
-    if (!fp || !config || !first_line || !subnet_error || !host_errors)
+    if (!fp || !config || !first_line)
         return -1;
 
     if (config->subnet_count >= MAX_SUBNETS)
         return -3;
-
-    *subnet_error = 0;  // Initialize to no error
-    memset(host_errors, 0, MAX_HOSTS_PER_SUBNET);  // Initialize all host errors to 0
 
     struct dhcp_subnet_t *subnet = &config->subnets[config->subnet_count];
     memset(subnet, 0, sizeof(struct dhcp_subnet_t));
@@ -642,7 +548,6 @@ static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *firs
     char *token = strtok(first_line, " \t");
     if (!token || strcmp(token, "subnet") != 0)
     {
-        *subnet_error = 1;
         fprintf(stderr, "Warning: Invalid subnet declaration\n");
         return -2;
     }
@@ -655,32 +560,30 @@ static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *firs
     {
         if (parse_ip_address(network, &subnet->network) != 0)
         {
-            *subnet_error = 1;
             fprintf(stderr, "Warning: Failed to parse subnet network address\n");
+            return -2; // Critical error - cannot proceed without valid network
         }
         if (parse_ip_address(netmask, &subnet->netmask) != 0)
         {
-            *subnet_error = 1;
             fprintf(stderr, "Warning: Failed to parse subnet netmask\n");
+            return -2; // Critical error - cannot proceed without valid netmask
         }
     }
     else
     {
-        *subnet_error = 1;
         fprintf(stderr, "Warning: Missing network or netmask in subnet declaration\n");
+        return -2; // Critical error - cannot proceed without valid network/netmask
     }
 
     char line[MAX_LINE_LEN];
-    int found_closing_brace = 0;
 
     while (fgets(line, sizeof(line), fp))
     {
         char *trimmed = trim(line);
         if (!trimmed)
         {
-            *subnet_error = 1;
             fprintf(stderr, "Warning: trim() failed in subnet block\n");
-            continue;
+            return -2;
         }
 
         // Skip empty lines and comments
@@ -689,7 +592,7 @@ static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *firs
 
         if (trimmed[0] == '}')
         {
-            found_closing_brace = 1;
+            config->subnet_count++;
             break;
         }
 
@@ -703,17 +606,18 @@ static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *firs
                 if (!host_name)
                 {
                     fprintf(stderr, "Warning: Invalid host name in subnet\n");
+                    advance_to_next_closed_brace(fp);
                     continue;
                 }
                 strncpy(subnet->hosts[subnet->host_count].name, host_name, MAX_HOSTNAME_LENGTH - 1);
 
-                uint8_t *current_host_error = &host_errors[subnet->host_count];
-                int result = parse_host_block(fp, subnet, current_host_error);
+                int result = parse_host_block(fp, subnet);
 
-                // Note: host_count is already incremented in parse_host_block
-                if (result != 0 && *current_host_error)
+                // Note: host_count is only incremented in parse_host_block on success
+                // So if there was an error, we don't increment host_count and overwrite the same slot
+                if (result != 0)
                 {
-                    fprintf(stderr, "Warning: Host '%s' has errors, will be removed\n", host_name);
+                    fprintf(stderr, "Warning: Host '%s' has errors, will be overwriten\n", host_name);
                 }
             }
         }
@@ -722,23 +626,13 @@ static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *firs
             int result = parse_subnet_option(trimmed, subnet);
             if (result != 0)
             {
-                *subnet_error = 1;
                 fprintf(stderr, "Warning: Failed to parse subnet option\n");
-                // Continue parsing other options
+                return -2;
             }
         }
     }
 
-    if (!found_closing_brace)
-    {
-        *subnet_error = 1;
-        fprintf(stderr, "Warning: Subnet block missing closing brace\n");
-    }
-
-    // Compact host array to remove invalid hosts
-    compact_host_array(subnet, host_errors);
-
-    config->subnet_count++;
+    // Apply global fallbacks for lease times
 
     if (subnet->default_lease_time == 0)
         subnet->default_lease_time = config->global.default_lease_time;
@@ -792,7 +686,7 @@ static int parse_subnet_block(FILE *fp, struct dhcp_config_t *config, char *firs
         subnet->dns_server_count = config->global.dns_server_count;
     }
 
-    return (*subnet_error == 0) ? 0 : -2;
+    return 0;
 }
 
 int parse_config_file(const char *filename, struct dhcp_config_t *config)
@@ -811,11 +705,6 @@ int parse_config_file(const char *filename, struct dhcp_config_t *config)
     config->global.allow_unknown_clients = true; // Default
     config->global.allow_bootp = true;           // Default
 
-    // Error tracking arrays
-    uint8_t subnet_errors[MAX_SUBNETS] = {0};
-    uint8_t host_errors[MAX_HOSTS_PER_SUBNET] = {0};
-    int global_options_failed = 0;
-
     char line[MAX_LINE_LEN];
     while (fgets(line, sizeof(line), fp))
     {
@@ -831,21 +720,15 @@ int parse_config_file(const char *filename, struct dhcp_config_t *config)
 
         if (strncmp(trimmed, "subnet", 6) == 0)
         {
-            if (config->subnet_count < MAX_SUBNETS)
-            {
-                uint8_t *current_subnet_error = &subnet_errors[config->subnet_count];
-                int result = parse_subnet_block(fp, config, trimmed, current_subnet_error, host_errors);
+            int result = parse_subnet_block(fp, config, trimmed);
 
-                // Note: subnet_count is already incremented in parse_subnet_block
-                if (result != 0 && *current_subnet_error)
-                {
-                    fprintf(stderr, "Warning: Subnet has errors, will be removed\n");
-                }
-            }
-            else
+            // Note: subnet_count is only incremented in parse_subnet_block on success
+            // So if there was an error, we don't increment subnet_count and overwrite the same slot
+            if (result != 0)
             {
-                fprintf(stderr, "Warning: Maximum subnet count (%d) reached, ignoring additional subnets\n",
-                        MAX_SUBNETS);
+                fprintf(stderr, "Warning: Failed to parse subnet block, continuing with other entries\n");
+                advance_to_next_closed_brace(fp); // Skip to the end of the faulty subnet block
+                // Continue parsing other subnets
             }
         }
         else
@@ -853,7 +736,6 @@ int parse_config_file(const char *filename, struct dhcp_config_t *config)
             int result = parse_global_option(trimmed, &config->global);
             if (result != 0)
             {
-                global_options_failed++;
                 fprintf(stderr, "Warning: Failed to parse global option, continuing with defaults\n");
                 // Continue parsing other options
             }
@@ -862,14 +744,13 @@ int parse_config_file(const char *filename, struct dhcp_config_t *config)
 
     fclose(fp);
 
-    // Compact subnet array to remove invalid subnets
-    compact_subnet_array(config, subnet_errors);
-
     // Print summary
     fprintf(stderr, "\n=== Configuration Parse Summary ===\n");
     fprintf(stderr, "Subnets loaded: %u\n", config->subnet_count);
-    fprintf(stderr, "Global option errors: %d\n", global_options_failed);
     fprintf(stderr, "===================================\n\n");
+
+
+    
 
     return 0;
 }
