@@ -10,7 +10,6 @@
 #include "leases6.h"
 
 #define MAX_POOL6_SIZE 4096
-#define DUID_MAX_LEN   130
 
 
 typedef enum
@@ -61,7 +60,7 @@ void ip6_pool_free(struct ip6_pool_t* pool);
 int  ip6_pool_sync_with_leases(struct ip6_pool_t* pool, lease_v6_db_t* lease_db);
 int  ip6_pool_update_from_lease(struct ip6_pool_t* pool, dhcpv6_lease_t* lease);
 
-struct ip6_allocation_result_t ip6_pool_allocate(struct ip6_pool_t* pool, const char* duid, uint32_t iaid, const char*hostname_opt, struct in6_addr requested_ip, dhcpv6_config_t* config, lease_v6_db_t* lease_db, uint32_t lease_time);   
+struct ip6_allocation_result_t ip6_pool_allocate(struct ip6_pool_t* pool, const char* duid, uint16_t duid_len, uint32_t iaid, const char*hostname_opt, struct in6_addr requested_ip, dhcpv6_config_t* config, lease_v6_db_t* lease_db, uint32_t lease_time);   
 
 int  ip6_pool_reserve_ip(struct ip6_pool_t* pool, struct in6_addr ip, const char* duid);
 int  ip6_pool_release_ip(struct ip6_pool_t* pool, struct in6_addr ip, lease_v6_db_t* db);

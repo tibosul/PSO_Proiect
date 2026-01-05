@@ -75,7 +75,7 @@ bool ipv6_increment(struct in6_addr *ip)
 {
     if(!ip) return false;
 
-    for(int i = 15;i>=0;i++)
+    for(int i = 15;i>=0;i--)
     {
         if(ip->s6_addr[i]!=0xFF)
         {
@@ -222,4 +222,26 @@ int parse_prefix_and_len(const char *in, char *prefix_out,size_t prefix_out_sz,u
 
     *len_out=(uint8_t)pref_len;
     return 0;
+}
+int duid_bin_to_hex(const uint8_t* in, uint16_t len, char* out, size_t out_sz)
+{
+    if (!out || out_sz == 0) return -1;
+    if (!in && len != 0) { out[0] = '\0'; return -1; }
+
+    
+    size_t need = len ? (size_t)(len * 3 - 1) + 1 : 1;
+    if (out_sz < need) { out[0] = '\0'; return -1; }
+
+    static const char* h = "0123456789abcdef";
+    size_t pos = 0;
+
+    for (uint16_t i = 0; i < len; i++) {
+        out[pos++] = h[(in[i] >> 4) & 0xF];
+        out[pos++] = h[in[i] & 0xF];
+        if (i + 1 < len) {
+            out[pos++] = ':';     
+        }
+    }
+    out[pos] = '\0';
+    return (int)pos;
 }

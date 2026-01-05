@@ -26,4 +26,6 @@ void unquote(char *s);
 void strip_inline_comment(char *s);
 int parse_prefix_and_len(const char *in, char *prefix_out,size_t prefix_out_sz,uint8_t *len_out);
 
+//void duid_bin_to_hex(const uint8_t* in, uint16_t len, char* out, size_t out_sz);
+int duid_bin_to_hex(const uint8_t *duid, uint16_t duid_len, char *out,size_t outsz);
 #endif

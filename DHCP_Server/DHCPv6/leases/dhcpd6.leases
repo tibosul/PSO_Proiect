@@ -14,38 +14,15 @@ authoring-byte-order little-endian;
 #   client-hostname "..."; vendor-class "..."; fqdn "...";
 # }
 # prefix <ipv6>/<plen> { ... }  # for IA_PD
-# Last updated: Thu Nov 13 11:05:37 2025
+# Last updated: Mon Jan  5 03:05:01 2026
 
 
-lease 2001:db8:1::10 {
-	starts 4 2025/11/13 11:05:37;
-	ends 4 2025/11/13 12:05:37;
-	tstp 4 2025/11/13 11:05:37;
-	cltt 4 2025/11/13 11:05:37;
-	duid 00:01:00:01:aa:bb:cc:dd:ee:ff:11:22;
-	iaid 1234;
+lease 2001:db8:1::1012 {
+	starts 1 2026/01/05 03:04:30;
+	ends 1 2026/01/05 03:04:30;
+	tstp 1 2026/01/05 03:04:30;
+	cltt 1 2026/01/05 03:04:30;
+	duid 00:03:00:01:08:00:27:2c:df:4b;
+	iaid 1;
 	binding state active;
-	client-hostname "laptop-andra";
-}
-
-prefix 2001:db8:3::/56 {
-	starts 4 2025/11/13 11:05:37;
-	ends 4 2025/11/13 13:05:37;
-	tstp 4 2025/11/13 11:05:37;
-	cltt 4 2025/11/13 11:05:37;
-	duid 00:01:00:01:de:ad:be:ef:01:02:03:04;
-	iaid 5678;
-	binding state active;
-	client-hostname "router-andra";
-}
-
-lease 2001:db8:1::1000 {
-	starts 4 2025/11/13 11:05:37;
-	ends 4 2025/11/13 13:05:37;
-	tstp 4 2025/11/13 11:05:37;
-	cltt 4 2025/11/13 11:05:37;
-	duid 00:01:00:01:aa:bb:cc:dd:ee:ff:11:33;
-	iaid 4242;
-	binding state active;
-	client-hostname "tester-v6";
 }
