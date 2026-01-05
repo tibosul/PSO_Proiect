@@ -8,15 +8,17 @@
 
 int parse_ip_address(const char *str, struct in_addr *addr)
 {
-    if (inet_pton(AF_INET, str, addr) == 1)
-    {
-        return 0;
-    }
-    return -1;
+    if (!str || !addr)
+        return -1;
+
+    return inet_pton(AF_INET, str, addr) == 1 ? 0 : -2;
 }
 
 int parse_mac_address(const char *str, uint8_t mac[6])
 {
+    if (!str || !mac)
+        return -1;
+
     uint32_t values[6];
     if (sscanf(str, "%x:%x:%x:%x:%x:%x", &values[0], &values[1],
                &values[2], &values[3], &values[4], &values[5]) == 6)
@@ -27,7 +29,7 @@ int parse_mac_address(const char *str, uint8_t mac[6])
         }
         return 0;
     }
-    return -1;
+    return -2;
 }
 
 void format_mac_address(const uint8_t mac[6], char *output, size_t output_len)
@@ -38,7 +40,13 @@ void format_mac_address(const uint8_t mac[6], char *output, size_t output_len)
 
 int parse_ip_list(const char *str, struct in_addr *addrs, int max_count)
 {
+    if (!str || !addrs || max_count <= 0)
+        return -1;
+
     char *str_copy = strdup(str);
+    if (!str_copy)
+        return -3;
+
     char *token;
     char *saveptr;
     int count = 0;
@@ -47,10 +55,14 @@ int parse_ip_list(const char *str, struct in_addr *addrs, int max_count)
     while (token && count < max_count)
     {
         token = trim(token);
-        if (parse_ip_address(token, &addrs[count]) == 0)
+        int result = parse_ip_address(token, &addrs[count]);
+        if (result != 0)
         {
-            count++;
+            free(str_copy);
+            return -2; // Invalid IP address
         }
+
+        count++;
         token = strtok_r(NULL, ",", &saveptr);
     }
 

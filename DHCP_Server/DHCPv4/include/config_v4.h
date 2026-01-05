@@ -43,6 +43,9 @@ struct dhcp_global_options_t
     uint32_t ping_timeout; // in seconds
     ddns_update_style_t ddns_update_style;
 
+    uint32_t default_lease_time; // in seconds
+    uint32_t max_lease_time;     // in seconds
+
     // Global time and server options (can be overridden per subnet)
     struct in_addr dns_servers[MAX_DNS_SERVERS];
     uint32_t dns_server_count;                           // number of DNS servers
@@ -51,9 +54,6 @@ struct dhcp_global_options_t
     struct in_addr netbios_servers[MAX_NETBIOS_SERVERS]; // DHCP option 44 - NetBIOS name servers
     uint32_t netbios_server_count;                       // number of NetBIOS servers
     int32_t time_offset;                                 // DHCP option 2 - Time offset from UTC (seconds)
-
-    uint32_t default_lease_time; // in seconds
-    uint32_t max_lease_time;     // in seconds
 
     // PXE Boot support (network booting)
     struct in_addr next_server; // Boot server IP address
@@ -133,7 +133,9 @@ struct dhcp_config_t
  * @brief Parse a DHCPv4 configuration file.
  * @param filename Path to the configuration file.
  * @param config Pointer to dhcp_config_t structure to populate.
- * @return 0 on success, -1 on failure.
+ * @return 0 on success,
+ *         -1 if filename or config is NULL, or file cannot be opened,
+ *         -2 if parsing fails for any configuration option
  */
 int parse_config_file(const char *filename, struct dhcp_config_t *config);
 
@@ -152,15 +154,17 @@ void print_config(const struct dhcp_config_t *config);
  * @brief Find the subnet that contains the given IP address.
  * @param config Pointer to dhcp_config_t structure.
  * @param ip IP address to search for.
- * @return Pointer to dhcp_subnet_t if found, NULL otherwise.
+ * @return Pointer to dhcp_subnet_t if found,
+ *         NULL if config is NULL or no matching subnet is found
  */
 struct dhcp_subnet_t *find_subnet_for_ip(const struct dhcp_config_t *config, const struct in_addr ip);
 
 /**
  * @brief Find a host reservation by MAC address within a subnet.
  * @param subnet Pointer to dhcp_subnet_t structure.
- * @param mac MAC address to search for.
- * @return Pointer to dhcp_host_reservation_t if found, NULL otherwise.
+ * @param mac MAC address to search for (6 bytes).
+ * @return Pointer to dhcp_host_reservation_t if found,
+ *         NULL if subnet or mac is NULL, or no matching host is found
  */
 struct dhcp_host_reservation_t *find_host_by_mac(const struct dhcp_subnet_t *subnet, const uint8_t mac[6]);
 

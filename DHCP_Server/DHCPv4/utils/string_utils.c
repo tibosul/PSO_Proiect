@@ -8,6 +8,9 @@
 
 char *trim(char *str)
 {
+    if (!str)
+        return NULL;
+
     while (isspace((unsigned char)*str))
         str++;
     if (*str == 0)
@@ -23,6 +26,9 @@ char *trim(char *str)
 
 char *remove_quotes(char *str)
 {
+    if (!str)
+        return NULL;
+
     if (str[0] == '"')
         str++;
     int len = strlen(str);
@@ -33,20 +39,23 @@ char *remove_quotes(char *str)
 
 int parse_uint32(const char *str, uint32_t *value)
 {
+    if (!str || !value)
+        return -1;
+
     char* endptr;
     errno = 0;
 
-    uint32_t val = strtoul(str, &endptr, 10);
+    unsigned long val = strtoul(str, &endptr, 10);
 
-    if(errno != 0)
-        return -1;
+    if (errno != 0)
+        return -2;
 
-    if(endptr == str || *endptr != '\0')
-        return -1;
+    if (endptr == str || *endptr != '\0')
+        return -2;
 
-    if(val > UINT32_MAX)
-        return -1;
-    
-    *value = val;
+    if (val > UINT32_MAX)
+        return -3;
+
+    *value = (uint32_t)val;
     return 0;
 }
