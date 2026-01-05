@@ -3,7 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
-#include "../include/dns_config.h"
+#include "dns_config.h"
 
 // TODO: adauga comentarii
 

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "../include/dns_packet.h"
+#include "dns_packet.h"
 
 int main()
 {
