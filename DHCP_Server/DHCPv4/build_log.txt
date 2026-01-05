@@ -1,0 +1,21 @@
+src/ip_pool.c:613:22: error: expected declaration specifiers or ‘...’ before ‘&’ token
+  613 | pthread_mutex_unlock(&pool->mutex);
+      |                      ^
+src/ip_pool.c:614:1: error: expected identifier or ‘(’ before ‘return’
+  614 | return 0;
+      | ^~~~~~
+src/ip_pool.c:615:1: error: expected identifier or ‘(’ before ‘}’ token
+  615 | }
+      | ^
+src/ip_pool.c: In function ‘ip_pool_sync_with_leases’:
+src/ip_pool.c:611:1: warning: control reaches end of non-void function [-Wreturn-type]
+  611 | }
+      | ^
+src/dhcp_message.c: In function ‘dhcp_message_make_offer’:
+src/dhcp_message.c:133:60: warning: unused parameter ‘global_opts’ [-Wunused-parameter]
+  133 |                              struct dhcp_global_options_t *global_opts) {
+      |                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+src/dhcp_message.c: In function ‘dhcp_message_make_ack’:
+src/dhcp_message.c:162:58: warning: unused parameter ‘global_opts’ [-Wunused-parameter]
+  162 |                            struct dhcp_global_options_t *global_opts) {
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~

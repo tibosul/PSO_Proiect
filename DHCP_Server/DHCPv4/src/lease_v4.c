@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <unistd.h>
+#include <signal.h>
 #include "../include/lease_v4.h"
 #include "../include/string_utils.h"
 #include "../include/network_utils.h"
@@ -73,6 +75,14 @@ int lease_db_init(struct lease_database_t *db, const char *filename)
     strncpy(db->filename, filename, sizeof(db->filename) - 1);
     db->next_lease_id = 1; // Start at 1 (0 = "no lease")
 
+    // Initialize mutex for thread safety
+    if (pthread_mutex_init(&db->db_mutex, NULL) != 0)
+    {
+        perror("Failed to initialize lease database mutex");
+        return -1;
+    }
+    db->mutex_initialized = true;
+
     return 0;
 }
 
@@ -80,6 +90,12 @@ void lease_db_free(struct lease_database_t *db)
 {
     if (db)
     {
+        // Destroy mutex if it was initialized
+        if (db->mutex_initialized)
+        {
+            pthread_mutex_destroy(&db->db_mutex);
+            db->mutex_initialized = false;
+        }
         memset(db, 0, sizeof(struct lease_database_t));
     }
 }
@@ -860,4 +876,922 @@ void lease_set_state_transition(struct dhcp_lease_t *lease, lease_state_t curren
     // Update string representation for file format compatibility
     strncpy(lease->binding_state, lease_state_to_string(current), sizeof(lease->binding_state) - 1);
     lease->binding_state[sizeof(lease->binding_state) - 1] = '\0';
+}
+
+//=============================================================================
+// Thread-Safe Operations (Paso 1: Mutex Protection)
+//=============================================================================
+
+void lease_db_lock(struct lease_database_t *db)
+{
+    if (db && db->mutex_initialized)
+    {
+        pthread_mutex_lock(&db->db_mutex);
+    }
+}
+
+void lease_db_unlock(struct lease_database_t *db)
+{
+    if (db && db->mutex_initialized)
+    {
+        pthread_mutex_unlock(&db->db_mutex);
+    }
+}
+
+struct dhcp_lease_t *lease_db_add_lease_safe(struct lease_database_t *db, struct in_addr ip, const uint8_t mac[6], uint32_t lease_time)
+{
+    if (!db)
+        return NULL;
+
+    lease_db_lock(db);
+    struct dhcp_lease_t *result = lease_db_add_lease(db, ip, mac, lease_time);
+    lease_db_unlock(db);
+
+    return result;
+}
+
+int lease_db_find_by_ip_safe(struct lease_database_t *db, struct in_addr ip, struct dhcp_lease_t *out_lease)
+{
+    if (!db || !out_lease)
+        return -1;
+
+    lease_db_lock(db);
+
+    struct dhcp_lease_t *lease = lease_db_find_by_ip(db, ip);
+    if (lease)
+    {
+        memcpy(out_lease, lease, sizeof(struct dhcp_lease_t));
+        lease_db_unlock(db);
+        return 0;
+    }
+
+    lease_db_unlock(db);
+    return -1;
+}
+
+int lease_db_find_by_mac_safe(struct lease_database_t *db, const uint8_t mac[6], struct dhcp_lease_t *out_lease)
+{
+    if (!db || !mac || !out_lease)
+        return -1;
+
+    lease_db_lock(db);
+
+    struct dhcp_lease_t *lease = lease_db_find_by_mac(db, mac);
+    if (lease)
+    {
+        memcpy(out_lease, lease, sizeof(struct dhcp_lease_t));
+        lease_db_unlock(db);
+        return 0;
+    }
+
+    lease_db_unlock(db);
+    return -1;
+}
+
+int lease_db_find_by_id_safe(struct lease_database_t *db, uint64_t lease_id, struct dhcp_lease_t *out_lease)
+{
+    if (!db || !out_lease)
+        return -1;
+
+    lease_db_lock(db);
+
+    struct dhcp_lease_t *lease = lease_db_find_by_id(db, lease_id);
+    if (lease)
+    {
+        memcpy(out_lease, lease, sizeof(struct dhcp_lease_t));
+        lease_db_unlock(db);
+        return 0;
+    }
+
+    lease_db_unlock(db);
+    return -1;
+}
+
+int lease_db_release_lease_safe(struct lease_database_t *db, struct in_addr ip)
+{
+    if (!db)
+        return -1;
+
+    lease_db_lock(db);
+    int result = lease_db_release_lease(db, ip);
+    lease_db_unlock(db);
+
+    return result;
+}
+
+int lease_db_renew_lease_safe(struct lease_database_t *db, struct in_addr ip, uint32_t lease_time)
+{
+    if (!db)
+        return -1;
+
+    lease_db_lock(db);
+    int result = lease_db_renew_lease(db, ip, lease_time);
+    lease_db_unlock(db);
+
+    return result;
+}
+
+int lease_db_expire_old_leases_safe(struct lease_database_t *db)
+{
+    if (!db)
+        return -1;
+
+    lease_db_lock(db);
+    int result = lease_db_expire_old_leases(db);
+    lease_db_unlock(db);
+
+    return result;
+}
+
+int lease_db_cleanup_expired_safe(struct lease_database_t *db)
+{
+    if (!db)
+        return -1;
+
+    lease_db_lock(db);
+    int result = lease_db_cleanup_expired(db);
+    lease_db_unlock(db);
+
+    return result;
+}
+
+int lease_db_save_safe(struct lease_database_t *db)
+{
+    if (!db)
+        return -1;
+
+    lease_db_lock(db);
+    int result = lease_db_save(db);
+    lease_db_unlock(db);
+
+    return result;
+}
+
+//=============================================================================
+// Timer Thread Operations (Paso 2: Automatic Expiration)
+//=============================================================================
+
+// Forward declaration of thread function
+static void *lease_timer_thread_func(void *arg);
+
+int lease_timer_init(struct lease_timer_t *timer, struct lease_database_t *db, uint32_t check_interval_sec)
+{
+    if (!timer || !db || check_interval_sec == 0)
+        return -1;
+
+    memset(timer, 0, sizeof(struct lease_timer_t));
+
+    timer->db = db;
+    timer->check_interval_sec = check_interval_sec;
+    timer->running = false;
+
+    // Initialize mutex and condition variable
+    if (pthread_mutex_init(&timer->timer_mutex, NULL) != 0)
+    {
+        perror("Failed to initialize timer mutex");
+        return -1;
+    }
+
+    if (pthread_cond_init(&timer->timer_cond, NULL) != 0)
+    {
+        perror("Failed to initialize timer condition variable");
+        pthread_mutex_destroy(&timer->timer_mutex);
+        return -1;
+    }
+
+    timer->mutex_initialized = true;
+
+    printf("Lease timer initialized (check interval: %u seconds)\n", check_interval_sec);
+    return 0;
+}
+
+int lease_timer_start(struct lease_timer_t *timer)
+{
+    if (!timer || !timer->mutex_initialized)
+        return -1;
+
+    pthread_mutex_lock(&timer->timer_mutex);
+
+    // Check if already running
+    if (timer->running)
+    {
+        pthread_mutex_unlock(&timer->timer_mutex);
+        return -1; // Already running
+    }
+
+    timer->running = true;
+    pthread_mutex_unlock(&timer->timer_mutex);
+
+    // Create the timer thread
+    if (pthread_create(&timer->timer_thread, NULL, lease_timer_thread_func, timer) != 0)
+    {
+        perror("Failed to create timer thread");
+        pthread_mutex_lock(&timer->timer_mutex);
+        timer->running = false;
+        pthread_mutex_unlock(&timer->timer_mutex);
+        return -1;
+    }
+
+    printf("Lease timer thread started\n");
+    return 0;
+}
+
+void lease_timer_stop(struct lease_timer_t *timer)
+{
+    if (!timer || !timer->mutex_initialized)
+        return;
+
+    // Signal thread to stop
+    pthread_mutex_lock(&timer->timer_mutex);
+    if (!timer->running)
+    {
+        pthread_mutex_unlock(&timer->timer_mutex);
+        return; // Already stopped
+    }
+
+    timer->running = false;
+    pthread_cond_signal(&timer->timer_cond); // Wake up thread
+    pthread_mutex_unlock(&timer->timer_mutex);
+
+    // Wait for thread to terminate
+    pthread_join(timer->timer_thread, NULL);
+
+    // Clean up synchronization primitives
+    pthread_mutex_destroy(&timer->timer_mutex);
+    pthread_cond_destroy(&timer->timer_cond);
+    timer->mutex_initialized = false;
+
+    printf("Lease timer thread stopped\n");
+}
+
+void lease_timer_wakeup(struct lease_timer_t *timer)
+{
+    if (!timer || !timer->mutex_initialized)
+        return;
+
+    pthread_mutex_lock(&timer->timer_mutex);
+    pthread_cond_signal(&timer->timer_cond); // Wake up thread immediately
+    pthread_mutex_unlock(&timer->timer_mutex);
+}
+
+bool lease_timer_is_running(const struct lease_timer_t *timer)
+{
+    if (!timer || !timer->mutex_initialized)
+        return false;
+
+    // Note: This is a simple check without locking
+    // For stricter thread safety, you could add a mutex lock here
+    return timer->running;
+}
+
+// Timer thread function - runs in background
+static void *lease_timer_thread_func(void *arg)
+{
+    struct lease_timer_t *timer = (struct lease_timer_t *)arg;
+    if (!timer)
+        return NULL;
+
+    printf("Timer thread started (PID: %d, TID: %lu)\n", getpid(), pthread_self());
+
+    while (1)
+    {
+        // Calculate absolute time for timed wait
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += timer->check_interval_sec;
+
+        // Wait with timeout (can be woken up early)
+        pthread_mutex_lock(&timer->timer_mutex);
+        pthread_cond_timedwait(&timer->timer_cond, &timer->timer_mutex, &ts);
+
+        // Check if we should stop
+        bool should_run = timer->running;
+        pthread_mutex_unlock(&timer->timer_mutex);
+
+        if (!should_run)
+        {
+            break; // Exit loop
+        }
+
+        // Perform lease expiration check (thread-safe)
+        int expired = lease_db_expire_old_leases_safe(timer->db);
+
+        if (expired > 0)
+        {
+            printf("[Timer] Auto-expired %d leases\n", expired);
+
+            // Optional: Save to disk after expiration
+            // lease_db_save_safe(timer->db);
+        }
+    }
+
+    printf("Timer thread exiting\n");
+    return NULL;
+}
+
+//=============================================================================
+// I/O Queue Operations (Paso 3: Async Disk I/O)
+//=============================================================================
+
+// Forward declaration of I/O thread function
+static void *lease_io_thread_func(void *arg);
+
+int lease_io_init(struct lease_io_queue_t *io_queue, struct lease_database_t *db)
+{
+    if (!io_queue || !db)
+        return -1;
+
+    memset(io_queue, 0, sizeof(struct lease_io_queue_t));
+
+    io_queue->db = db;
+    io_queue->running = false;
+    io_queue->head = 0;
+    io_queue->tail = 0;
+    io_queue->count = 0;
+    io_queue->operations_processed = 0;
+    io_queue->operations_dropped = 0;
+
+    // Initialize mutex and condition variable
+    if (pthread_mutex_init(&io_queue->queue_mutex, NULL) != 0)
+    {
+        perror("Failed to initialize I/O queue mutex");
+        return -1;
+    }
+
+    if (pthread_cond_init(&io_queue->queue_cond, NULL) != 0)
+    {
+        perror("Failed to initialize I/O queue condition variable");
+        pthread_mutex_destroy(&io_queue->queue_mutex);
+        return -1;
+    }
+
+    io_queue->mutex_initialized = true;
+
+    printf("I/O queue initialized (buffer size: %d)\n", IO_QUEUE_SIZE);
+    return 0;
+}
+
+int lease_io_start(struct lease_io_queue_t *io_queue)
+{
+    if (!io_queue || !io_queue->mutex_initialized)
+        return -1;
+
+    pthread_mutex_lock(&io_queue->queue_mutex);
+
+    // Check if already running
+    if (io_queue->running)
+    {
+        pthread_mutex_unlock(&io_queue->queue_mutex);
+        return -1; // Already running
+    }
+
+    io_queue->running = true;
+    pthread_mutex_unlock(&io_queue->queue_mutex);
+
+    // Create the I/O thread
+    if (pthread_create(&io_queue->io_thread, NULL, lease_io_thread_func, io_queue) != 0)
+    {
+        perror("Failed to create I/O thread");
+        pthread_mutex_lock(&io_queue->queue_mutex);
+        io_queue->running = false;
+        pthread_mutex_unlock(&io_queue->queue_mutex);
+        return -1;
+    }
+
+    printf("I/O thread started\n");
+    return 0;
+}
+
+void lease_io_stop(struct lease_io_queue_t *io_queue)
+{
+    if (!io_queue || !io_queue->mutex_initialized)
+        return;
+
+    // Queue a shutdown operation
+    struct io_operation_t shutdown_op;
+    shutdown_op.type = IO_OP_SHUTDOWN;
+    shutdown_op.timestamp = time(NULL);
+
+    pthread_mutex_lock(&io_queue->queue_mutex);
+
+    if (!io_queue->running)
+    {
+        pthread_mutex_unlock(&io_queue->queue_mutex);
+        return; // Already stopped
+    }
+
+    // Add shutdown operation to queue
+    if (io_queue->count < IO_QUEUE_SIZE)
+    {
+        io_queue->queue[io_queue->tail] = shutdown_op;
+        io_queue->tail = (io_queue->tail + 1) % IO_QUEUE_SIZE;
+        io_queue->count++;
+    }
+
+    pthread_cond_signal(&io_queue->queue_cond); // Wake up thread
+    pthread_mutex_unlock(&io_queue->queue_mutex);
+
+    // Wait for thread to terminate
+    pthread_join(io_queue->io_thread, NULL);
+
+    // Clean up synchronization primitives
+    pthread_mutex_destroy(&io_queue->queue_mutex);
+    pthread_cond_destroy(&io_queue->queue_cond);
+    io_queue->mutex_initialized = false;
+
+    printf("I/O thread stopped (processed: %lu, dropped: %lu)\n",
+           io_queue->operations_processed, io_queue->operations_dropped);
+}
+
+int lease_io_queue_save_lease(struct lease_io_queue_t *io_queue, const struct dhcp_lease_t *lease)
+{
+    if (!io_queue || !lease || !io_queue->mutex_initialized)
+        return -1;
+
+    pthread_mutex_lock(&io_queue->queue_mutex);
+
+    // Check if queue is full
+    if (io_queue->count >= IO_QUEUE_SIZE)
+    {
+        io_queue->operations_dropped++;
+        pthread_mutex_unlock(&io_queue->queue_mutex);
+        fprintf(stderr, "[I/O Queue] Queue full, operation dropped\n");
+        return -1;
+    }
+
+    // Add operation to queue
+    struct io_operation_t op;
+    op.type = IO_OP_SAVE_LEASE;
+    op.lease = *lease; // Copy lease data
+    op.timestamp = time(NULL);
+
+    io_queue->queue[io_queue->tail] = op;
+    io_queue->tail = (io_queue->tail + 1) % IO_QUEUE_SIZE;
+    io_queue->count++;
+
+    pthread_cond_signal(&io_queue->queue_cond); // Wake up I/O thread
+    pthread_mutex_unlock(&io_queue->queue_mutex);
+
+    return 0;
+}
+
+int lease_io_queue_save_all(struct lease_io_queue_t *io_queue)
+{
+    if (!io_queue || !io_queue->mutex_initialized)
+        return -1;
+
+    pthread_mutex_lock(&io_queue->queue_mutex);
+
+    // Check if queue is full
+    if (io_queue->count >= IO_QUEUE_SIZE)
+    {
+        io_queue->operations_dropped++;
+        pthread_mutex_unlock(&io_queue->queue_mutex);
+        fprintf(stderr, "[I/O Queue] Queue full, save all operation dropped\n");
+        return -1;
+    }
+
+    // Add operation to queue
+    struct io_operation_t op;
+    op.type = IO_OP_SAVE_ALL;
+    op.timestamp = time(NULL);
+
+    io_queue->queue[io_queue->tail] = op;
+    io_queue->tail = (io_queue->tail + 1) % IO_QUEUE_SIZE;
+    io_queue->count++;
+
+    pthread_cond_signal(&io_queue->queue_cond); // Wake up I/O thread
+    pthread_mutex_unlock(&io_queue->queue_mutex);
+
+    return 0;
+}
+
+void lease_io_get_stats(struct lease_io_queue_t *io_queue, uint64_t *processed, uint64_t *dropped, uint32_t *pending)
+{
+    if (!io_queue || !io_queue->mutex_initialized)
+        return;
+
+    pthread_mutex_lock(&io_queue->queue_mutex);
+
+    if (processed)
+        *processed = io_queue->operations_processed;
+    if (dropped)
+        *dropped = io_queue->operations_dropped;
+    if (pending)
+        *pending = io_queue->count;
+
+    pthread_mutex_unlock(&io_queue->queue_mutex);
+}
+
+bool lease_io_is_running(const struct lease_io_queue_t *io_queue)
+{
+    if (!io_queue || !io_queue->mutex_initialized)
+        return false;
+
+    return io_queue->running;
+}
+
+// I/O thread function - processes operations from queue
+static void *lease_io_thread_func(void *arg)
+{
+    struct lease_io_queue_t *io_queue = (struct lease_io_queue_t *)arg;
+    if (!io_queue)
+        return NULL;
+
+    printf("I/O thread started (PID: %d, TID: %lu)\n", getpid(), pthread_self());
+
+    while (1)
+    {
+        pthread_mutex_lock(&io_queue->queue_mutex);
+
+        // Wait for operations in queue
+        while (io_queue->count == 0 && io_queue->running)
+        {
+            pthread_cond_wait(&io_queue->queue_cond, &io_queue->queue_mutex);
+        }
+
+        // Check if we should exit (shutdown operation or stopped)
+        if (io_queue->count == 0 && !io_queue->running)
+        {
+            pthread_mutex_unlock(&io_queue->queue_mutex);
+            break;
+        }
+
+        // Dequeue operation
+        struct io_operation_t op = io_queue->queue[io_queue->head];
+        io_queue->head = (io_queue->head + 1) % IO_QUEUE_SIZE;
+        io_queue->count--;
+
+        pthread_mutex_unlock(&io_queue->queue_mutex);
+
+        // Process operation (outside lock to avoid blocking producers)
+        switch (op.type)
+        {
+        case IO_OP_SAVE_LEASE:
+            // Append single lease to file
+            if (lease_db_append_lease(io_queue->db, &op.lease) == 0)
+            {
+                printf("[I/O] Saved lease: %s\n", inet_ntoa(op.lease.ip_address));
+            }
+            else
+            {
+                fprintf(stderr, "[I/O] Failed to save lease\n");
+            }
+            break;
+
+        case IO_OP_SAVE_ALL:
+            // Save entire database
+            if (lease_db_save_safe(io_queue->db) == 0)
+            {
+                printf("[I/O] Saved full database\n");
+            }
+            else
+            {
+                fprintf(stderr, "[I/O] Failed to save database\n");
+            }
+            break;
+
+        case IO_OP_SHUTDOWN:
+            printf("[I/O] Shutdown signal received\n");
+            pthread_mutex_lock(&io_queue->queue_mutex);
+            io_queue->running = false;
+            pthread_mutex_unlock(&io_queue->queue_mutex);
+            goto exit_loop; // Exit cleanly
+
+        default:
+            fprintf(stderr, "[I/O] Unknown operation type: %d\n", op.type);
+            break;
+        }
+
+        // Update statistics
+        pthread_mutex_lock(&io_queue->queue_mutex);
+        io_queue->operations_processed++;
+        pthread_mutex_unlock(&io_queue->queue_mutex);
+    }
+
+exit_loop:
+    printf("I/O thread exiting\n");
+    return NULL;
+}
+
+//=============================================================================
+// Unified Server Structure (Paso 4: Signal Handling & Server Management)
+//=============================================================================
+
+// Global pointer for signal handler (only way to pass context to signal handlers)
+static struct dhcp_server_t *g_server_instance = NULL;
+
+// Signal handler function
+static void dhcp_server_signal_handler(int signum)
+{
+    if (!g_server_instance)
+        return;
+
+    switch (signum)
+    {
+    case SIGINT:
+    case SIGTERM:
+        printf("\n[Signal] Received %s, initiating shutdown...\n",
+               signum == SIGINT ? "SIGINT" : "SIGTERM");
+        g_server_instance->shutdown_requested = 1;
+
+        // Wake up wait_for_shutdown if it's blocking
+        if (g_server_instance->mutex_initialized)
+        {
+            pthread_mutex_lock(&g_server_instance->server_mutex);
+            pthread_cond_signal(&g_server_instance->server_cond);
+            pthread_mutex_unlock(&g_server_instance->server_mutex);
+        }
+        break;
+
+    case SIGHUP:
+        printf("\n[Signal] Received SIGHUP, reload requested\n");
+        g_server_instance->reload_requested = 1;
+        break;
+
+    default:
+        break;
+    }
+}
+
+int dhcp_server_init(struct dhcp_server_t *server, const char *lease_file,
+                     uint32_t timer_interval, bool enable_async_io)
+{
+    if (!server || !lease_file)
+        return -1;
+
+    memset(server, 0, sizeof(struct dhcp_server_t));
+
+    // Allocate and initialize lease database
+    server->lease_db = malloc(sizeof(struct lease_database_t));
+    if (!server->lease_db)
+    {
+        perror("Failed to allocate lease database");
+        return -1;
+    }
+
+    if (lease_db_init(server->lease_db, lease_file) != 0)
+    {
+        free(server->lease_db);
+        return -1;
+    }
+
+    // Load existing leases
+    lease_db_load(server->lease_db);
+
+    // Initialize timer if interval > 0
+    if (timer_interval > 0)
+    {
+        server->timer = malloc(sizeof(struct lease_timer_t));
+        if (!server->timer)
+        {
+            perror("Failed to allocate timer");
+            lease_db_free(server->lease_db);
+            free(server->lease_db);
+            return -1;
+        }
+
+        if (lease_timer_init(server->timer, server->lease_db, timer_interval) != 0)
+        {
+            free(server->timer);
+            server->timer = NULL;
+            lease_db_free(server->lease_db);
+            free(server->lease_db);
+            return -1;
+        }
+    }
+
+    // Initialize I/O queue if enabled
+    if (enable_async_io)
+    {
+        server->io_queue = malloc(sizeof(struct lease_io_queue_t));
+        if (!server->io_queue)
+        {
+            perror("Failed to allocate I/O queue");
+            if (server->timer)
+            {
+                free(server->timer);
+            }
+            lease_db_free(server->lease_db);
+            free(server->lease_db);
+            return -1;
+        }
+
+        if (lease_io_init(server->io_queue, server->lease_db) != 0)
+        {
+            free(server->io_queue);
+            server->io_queue = NULL;
+            if (server->timer)
+            {
+                free(server->timer);
+            }
+            lease_db_free(server->lease_db);
+            free(server->lease_db);
+            return -1;
+        }
+    }
+
+    // Initialize synchronization
+    if (pthread_mutex_init(&server->server_mutex, NULL) != 0)
+    {
+        perror("Failed to initialize server mutex");
+        if (server->io_queue)
+            free(server->io_queue);
+        if (server->timer)
+            free(server->timer);
+        lease_db_free(server->lease_db);
+        free(server->lease_db);
+        return -1;
+    }
+
+    if (pthread_cond_init(&server->server_cond, NULL) != 0)
+    {
+        perror("Failed to initialize server condition variable");
+        pthread_mutex_destroy(&server->server_mutex);
+        if (server->io_queue)
+            free(server->io_queue);
+        if (server->timer)
+            free(server->timer);
+        lease_db_free(server->lease_db);
+        free(server->lease_db);
+        return -1;
+    }
+
+    server->mutex_initialized = true;
+    server->shutdown_requested = 0;
+    server->reload_requested = 0;
+
+    printf("✓ DHCP server initialized\n");
+    return 0;
+}
+
+int dhcp_server_start(struct dhcp_server_t *server)
+{
+    if (!server)
+        return -1;
+
+    // Start timer thread
+    if (server->timer)
+    {
+        if (lease_timer_start(server->timer) != 0)
+        {
+            fprintf(stderr, "Failed to start timer thread\n");
+            return -1;
+        }
+    }
+
+    // Start I/O queue thread
+    if (server->io_queue)
+    {
+        if (lease_io_start(server->io_queue) != 0)
+        {
+            fprintf(stderr, "Failed to start I/O thread\n");
+            if (server->timer)
+                lease_timer_stop(server->timer);
+            return -1;
+        }
+    }
+
+    printf("✓ DHCP server started\n");
+    return 0;
+}
+
+void dhcp_server_stop(struct dhcp_server_t *server)
+{
+    if (!server)
+        return;
+
+    printf("Stopping DHCP server...\n");
+
+    // Stop timer thread
+    if (server->timer)
+    {
+        lease_timer_stop(server->timer);
+        free(server->timer);
+        server->timer = NULL;
+    }
+
+    // Stop I/O queue (flushes pending operations)
+    if (server->io_queue)
+    {
+        lease_io_stop(server->io_queue);
+        free(server->io_queue);
+        server->io_queue = NULL;
+    }
+
+    // Save database one final time
+    if (server->lease_db)
+    {
+        printf("Saving lease database...\n");
+        lease_db_save(server->lease_db);
+        lease_db_free(server->lease_db);
+        free(server->lease_db);
+        server->lease_db = NULL;
+    }
+
+    // Clean up synchronization
+    if (server->mutex_initialized)
+    {
+        pthread_mutex_destroy(&server->server_mutex);
+        pthread_cond_destroy(&server->server_cond);
+        server->mutex_initialized = false;
+    }
+
+    // Clear global instance
+    if (g_server_instance == server)
+    {
+        g_server_instance = NULL;
+    }
+
+    printf("✓ DHCP server stopped\n");
+}
+
+void dhcp_server_setup_signals(struct dhcp_server_t *server)
+{
+    if (!server)
+        return;
+
+    // Set global instance for signal handler
+    g_server_instance = server;
+
+    // Install signal handlers
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = dhcp_server_signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+
+    printf("✓ Signal handlers installed (SIGINT, SIGTERM, SIGHUP)\n");
+}
+
+void dhcp_server_wait_for_shutdown(struct dhcp_server_t *server)
+{
+    if (!server || !server->mutex_initialized)
+        return;
+
+    pthread_mutex_lock(&server->server_mutex);
+
+    while (!server->shutdown_requested)
+    {
+        pthread_cond_wait(&server->server_cond, &server->server_mutex);
+    }
+
+    pthread_mutex_unlock(&server->server_mutex);
+}
+
+bool dhcp_server_check_reload(struct dhcp_server_t *server)
+{
+    if (!server)
+        return false;
+
+    bool reload = server->reload_requested;
+    if (reload)
+    {
+        server->reload_requested = 0; // Clear flag
+    }
+    return reload;
+}
+
+void dhcp_server_print_stats(const struct dhcp_server_t *server)
+{
+    if (!server)
+        return;
+
+    printf("\n=== DHCP Server Statistics ===\n");
+
+    // Lease database stats
+    if (server->lease_db)
+    {
+        printf("Lease Database:\n");
+        printf("  Total leases: %u\n", server->lease_db->lease_count);
+        printf("  Next lease ID: %lu\n", server->lease_db->next_lease_id);
+    }
+
+    // Timer stats
+    if (server->timer)
+    {
+        printf("Timer Thread:\n");
+        printf("  Status: %s\n", lease_timer_is_running(server->timer) ? "Running" : "Stopped");
+        printf("  Check interval: %u seconds\n", server->timer->check_interval_sec);
+    }
+
+    // I/O queue stats
+    if (server->io_queue)
+    {
+        uint64_t processed, dropped;
+        uint32_t pending;
+        lease_io_get_stats(server->io_queue, &processed, &dropped, &pending);
+
+        printf("I/O Queue:\n");
+        printf("  Status: %s\n", lease_io_is_running(server->io_queue) ? "Running" : "Stopped");
+        printf("  Operations processed: %lu\n", processed);
+        printf("  Operations dropped: %lu\n", dropped);
+        printf("  Operations pending: %u\n", pending);
+    }
+
+    printf("==============================\n\n");
 }

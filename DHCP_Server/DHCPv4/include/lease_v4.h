@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <netinet/in.h>
 #include <time.h>
+#include <pthread.h>
+#include <signal.h>
 
 #define MAX_LEASES 1024
 #define MAX_CLIENT_HOSTNAME 256
@@ -22,6 +24,20 @@ typedef enum
     LEASE_STATE_BACKUP,    // Backup state for failover
     LEASE_STATE_UNKNOWN    // Unknown (used as return value to avoid warnings)
 } lease_state_t;
+
+/**
+ * @brief Convert lease state enum to string.
+ * @param state Lease state enumeration value.
+ * @return String representation (e.g., "active", "free", "expired").
+ */
+const char *lease_state_to_string(lease_state_t state);
+
+/**
+ * @brief Convert string to lease state enum.
+ * @param str State string (e.g., "active", "free").
+ * @return Lease state enumeration value.
+ */
+lease_state_t lease_state_from_string(const char *str);
 
 struct dhcp_lease_t
 {
@@ -62,6 +78,80 @@ struct lease_database_t
     uint32_t lease_count;
     char filename[256];     // Path to lease file
     uint64_t next_lease_id; // Counter for generating unique IDs
+
+    // Thread safety
+    pthread_mutex_t db_mutex;     // Protects access to leases[] and lease_count
+    bool mutex_initialized;       // Track if mutex was initialized
+};
+
+/**
+ * @brief Timer thread for automatic lease expiration checks.
+ *
+ * This structure manages a background thread that periodically checks
+ * for expired leases and marks them as EXPIRED automatically.
+ */
+struct lease_timer_t
+{
+    struct lease_database_t *db;  // Pointer to the lease database
+    pthread_t timer_thread;       // Timer thread handle
+    bool running;                 // Thread running flag
+    uint32_t check_interval_sec;  // How often to check (e.g., 60 seconds)
+
+    // Synchronization
+    pthread_mutex_t timer_mutex;  // Protects timer state
+    pthread_cond_t timer_cond;    // For early wake-up and shutdown
+    bool mutex_initialized;       // Track if mutex was initialized
+};
+
+/**
+ * @brief I/O queue operation type.
+ */
+typedef enum
+{
+    IO_OP_SAVE_LEASE,   // Append single lease to file
+    IO_OP_SAVE_ALL,     // Save entire database to file
+    IO_OP_SHUTDOWN      // Shutdown signal
+} io_operation_type_t;
+
+/**
+ * @brief I/O queue operation.
+ */
+struct io_operation_t
+{
+    io_operation_type_t type;
+    struct dhcp_lease_t lease;  // Lease data (for SAVE_LEASE)
+    time_t timestamp;           // When operation was queued
+};
+
+#define IO_QUEUE_SIZE 256
+
+/**
+ * @brief Async I/O queue for non-blocking disk writes.
+ *
+ * This structure manages a background thread that handles all disk I/O
+ * asynchronously, preventing the main thread from blocking on write operations.
+ * Uses producer-consumer pattern with circular buffer.
+ */
+struct lease_io_queue_t
+{
+    struct lease_database_t *db;  // Pointer to the lease database
+    pthread_t io_thread;          // I/O thread handle
+    bool running;                 // Thread running flag
+
+    // Circular queue for pending operations
+    struct io_operation_t queue[IO_QUEUE_SIZE];
+    uint32_t head;                // Queue head (consumer reads here)
+    uint32_t tail;                // Queue tail (producer writes here)
+    uint32_t count;               // Number of items in queue
+
+    // Synchronization
+    pthread_mutex_t queue_mutex;  // Protects queue state
+    pthread_cond_t queue_cond;    // Signals when items available
+    bool mutex_initialized;       // Track if mutex was initialized
+
+    // Statistics
+    uint64_t operations_processed;
+    uint64_t operations_dropped;  // When queue is full
 };
 
 // ----------------------------------------------------------------------------------------------
@@ -219,20 +309,6 @@ int lease_db_cleanup_expired(struct lease_database_t *db);
 void lease_db_print(const struct lease_database_t *db);
 
 /**
- * @brief Convert lease state enum to string.
- * @param state Lease state enumeration value.
- * @return String representation (e.g., "active", "free", "expired").
- */
-const char *lease_state_to_string(lease_state_t state);
-
-/**
- * @brief Convert string to lease state enum.
- * @param str State string (e.g., "active", "free").
- * @return Lease state enumeration value.
- */
-lease_state_t lease_state_from_string(const char *str);
-
-/**
  * @brief Check if a lease has expired.
  * @param lease Pointer to the lease structure.
  * @return true if expired, false otherwise.
@@ -328,5 +404,338 @@ time_t parse_lease_time(const char *time_str);
  * Example output: "4 2024/10/26 14:30:00"
  */
 void format_lease_time(time_t timestamp, char *output, size_t output_len);
+
+// ----------------------------------------------------------------------------------------------
+// Thread-Safe Operations (Paso 1: Mutex Protection)
+// ----------------------------------------------------------------------------------------------
+
+/**
+ * @brief Lock the lease database for exclusive access.
+ * @param db Pointer to the lease database structure.
+ *
+ * Must be called before accessing lease data from multiple threads.
+ * Always pair with lease_db_unlock().
+ */
+void lease_db_lock(struct lease_database_t *db);
+
+/**
+ * @brief Unlock the lease database.
+ * @param db Pointer to the lease database structure.
+ *
+ * Must be called after lease_db_lock() to release the lock.
+ */
+void lease_db_unlock(struct lease_database_t *db);
+
+/**
+ * @brief Thread-safe version of lease_db_add_lease.
+ * @param db Pointer to the lease database structure.
+ * @param ip IP address to lease.
+ * @param mac Client MAC address (6 bytes).
+ * @param lease_time Lease duration in seconds.
+ * @return Pointer to the newly created lease, or NULL on failure.
+ *
+ * Automatically locks/unlocks the database during operation.
+ */
+struct dhcp_lease_t *lease_db_add_lease_safe(struct lease_database_t *db, struct in_addr ip, const uint8_t mac[6], uint32_t lease_time);
+
+/**
+ * @brief Thread-safe version of lease_db_find_by_ip.
+ * @param db Pointer to the lease database structure.
+ * @param ip IP address to search for.
+ * @param out_lease Output buffer to copy the lease data.
+ * @return 0 on success (lease found), -1 on failure (not found).
+ *
+ * Copies lease data to out_lease to avoid holding the lock.
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_find_by_ip_safe(struct lease_database_t *db, struct in_addr ip, struct dhcp_lease_t *out_lease);
+
+/**
+ * @brief Thread-safe version of lease_db_find_by_mac.
+ * @param db Pointer to the lease database structure.
+ * @param mac MAC address to search for (6 bytes).
+ * @param out_lease Output buffer to copy the lease data.
+ * @return 0 on success (lease found), -1 on failure (not found).
+ *
+ * Copies lease data to out_lease to avoid holding the lock.
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_find_by_mac_safe(struct lease_database_t *db, const uint8_t mac[6], struct dhcp_lease_t *out_lease);
+
+/**
+ * @brief Thread-safe version of lease_db_find_by_id.
+ * @param db Pointer to the lease database structure.
+ * @param lease_id The unique lease identifier to search for.
+ * @param out_lease Output buffer to copy the lease data.
+ * @return 0 on success (lease found), -1 on failure (not found).
+ *
+ * Copies lease data to out_lease to avoid holding the lock.
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_find_by_id_safe(struct lease_database_t *db, uint64_t lease_id, struct dhcp_lease_t *out_lease);
+
+/**
+ * @brief Thread-safe version of lease_db_release_lease.
+ * @param db Pointer to the lease database structure.
+ * @param ip IP address of the lease to release.
+ * @return 0 on success, -1 on failure.
+ *
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_release_lease_safe(struct lease_database_t *db, struct in_addr ip);
+
+/**
+ * @brief Thread-safe version of lease_db_renew_lease.
+ * @param db Pointer to the lease database structure.
+ * @param ip IP address of the lease to renew.
+ * @param lease_time New lease duration in seconds.
+ * @return 0 on success, -1 on failure.
+ *
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_renew_lease_safe(struct lease_database_t *db, struct in_addr ip, uint32_t lease_time);
+
+/**
+ * @brief Thread-safe version of lease_db_expire_old_leases.
+ * @param db Pointer to the lease database structure.
+ * @return Number of leases expired.
+ *
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_expire_old_leases_safe(struct lease_database_t *db);
+
+/**
+ * @brief Thread-safe version of lease_db_cleanup_expired.
+ * @param db Pointer to the lease database structure.
+ * @return Number of leases removed.
+ *
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_cleanup_expired_safe(struct lease_database_t *db);
+
+/**
+ * @brief Thread-safe version of lease_db_save.
+ * @param db Pointer to the lease database structure.
+ * @return 0 on success, -1 on failure.
+ *
+ * Automatically locks/unlocks the database during operation.
+ */
+int lease_db_save_safe(struct lease_database_t *db);
+
+// ----------------------------------------------------------------------------------------------
+// Timer Thread Operations (Paso 2: Automatic Expiration)
+// ----------------------------------------------------------------------------------------------
+
+/**
+ * @brief Initialize a lease timer for automatic expiration checks.
+ * @param timer Pointer to the lease_timer_t structure.
+ * @param db Pointer to the lease database to monitor.
+ * @param check_interval_sec How often to check for expired leases (in seconds).
+ * @return 0 on success, -1 on failure.
+ *
+ * Initializes the timer structure but does not start the thread.
+ * Call lease_timer_start() to begin automatic expiration checks.
+ */
+int lease_timer_init(struct lease_timer_t *timer, struct lease_database_t *db, uint32_t check_interval_sec);
+
+/**
+ * @brief Start the timer thread.
+ * @param timer Pointer to the lease_timer_t structure.
+ * @return 0 on success, -1 on failure.
+ *
+ * Starts a background thread that periodically checks for expired leases.
+ * The thread runs until lease_timer_stop() is called.
+ */
+int lease_timer_start(struct lease_timer_t *timer);
+
+/**
+ * @brief Stop the timer thread and clean up resources.
+ * @param timer Pointer to the lease_timer_t structure.
+ *
+ * Gracefully stops the timer thread and waits for it to terminate.
+ * Destroys all synchronization primitives.
+ */
+void lease_timer_stop(struct lease_timer_t *timer);
+
+/**
+ * @brief Wake up the timer thread immediately.
+ * @param timer Pointer to the lease_timer_t structure.
+ *
+ * Forces the timer thread to wake up and check for expired leases now,
+ * instead of waiting for the next scheduled check.
+ */
+void lease_timer_wakeup(struct lease_timer_t *timer);
+
+/**
+ * @brief Check if the timer thread is running.
+ * @param timer Pointer to the lease_timer_t structure.
+ * @return true if running, false otherwise.
+ */
+bool lease_timer_is_running(const struct lease_timer_t *timer);
+
+// ----------------------------------------------------------------------------------------------
+// I/O Queue Operations (Paso 3: Async Disk I/O)
+// ----------------------------------------------------------------------------------------------
+
+/**
+ * @brief Initialize the I/O queue for async disk operations.
+ * @param io_queue Pointer to the lease_io_queue_t structure.
+ * @param db Pointer to the lease database.
+ * @return 0 on success, -1 on failure.
+ *
+ * Initializes the I/O queue structure but does not start the thread.
+ * Call lease_io_start() to begin processing operations.
+ */
+int lease_io_init(struct lease_io_queue_t *io_queue, struct lease_database_t *db);
+
+/**
+ * @brief Start the I/O thread.
+ * @param io_queue Pointer to the lease_io_queue_t structure.
+ * @return 0 on success, -1 on failure.
+ *
+ * Starts a background thread that processes disk I/O operations from the queue.
+ */
+int lease_io_start(struct lease_io_queue_t *io_queue);
+
+/**
+ * @brief Stop the I/O thread and clean up resources.
+ * @param io_queue Pointer to the lease_io_queue_t structure.
+ *
+ * Gracefully stops the I/O thread, processes remaining operations,
+ * and destroys all synchronization primitives.
+ */
+void lease_io_stop(struct lease_io_queue_t *io_queue);
+
+/**
+ * @brief Queue a lease for async save (append to file).
+ * @param io_queue Pointer to the lease_io_queue_t structure.
+ * @param lease Pointer to the lease to save.
+ * @return 0 on success, -1 on failure (queue full).
+ *
+ * Non-blocking: adds the lease to the queue and returns immediately.
+ * The I/O thread will append it to the lease file in the background.
+ */
+int lease_io_queue_save_lease(struct lease_io_queue_t *io_queue, const struct dhcp_lease_t *lease);
+
+/**
+ * @brief Queue a full database save operation.
+ * @param io_queue Pointer to the lease_io_queue_t structure.
+ * @return 0 on success, -1 on failure (queue full).
+ *
+ * Non-blocking: queues a complete database save and returns immediately.
+ * The I/O thread will perform the save in the background.
+ */
+int lease_io_queue_save_all(struct lease_io_queue_t *io_queue);
+
+/**
+ * @brief Get I/O queue statistics.
+ * @param io_queue Pointer to the lease_io_queue_t structure.
+ * @param processed Output: number of operations processed.
+ * @param dropped Output: number of operations dropped (queue full).
+ * @param pending Output: number of operations currently pending.
+ */
+void lease_io_get_stats(struct lease_io_queue_t *io_queue, uint64_t *processed, uint64_t *dropped, uint32_t *pending);
+
+/**
+ * @brief Check if I/O queue is running.
+ * @param io_queue Pointer to the lease_io_queue_t structure.
+ * @return true if running, false otherwise.
+ */
+bool lease_io_is_running(const struct lease_io_queue_t *io_queue);
+
+// ----------------------------------------------------------------------------------------------
+// Unified Server Structure (Paso 4: Signal Handling & Server Management)
+// ----------------------------------------------------------------------------------------------
+
+/**
+ * @brief Unified DHCP server structure combining all components.
+ *
+ * This structure brings together the lease database, timer thread, and I/O queue
+ * into a single manageable unit with signal handling support.
+ */
+struct dhcp_server_t
+{
+    // Core components
+    struct lease_database_t *lease_db;     // Lease database
+    struct lease_timer_t *timer;           // Expiration timer thread
+    struct lease_io_queue_t *io_queue;     // Async I/O queue
+
+    // Signal handling
+    volatile sig_atomic_t shutdown_requested;  // Set by signal handler
+    volatile sig_atomic_t reload_requested;    // Set by SIGHUP
+
+    // Synchronization for shutdown
+    pthread_mutex_t server_mutex;
+    pthread_cond_t server_cond;
+    bool mutex_initialized;
+};
+
+/**
+ * @brief Initialize the DHCP server with all components.
+ * @param server Pointer to the dhcp_server_t structure.
+ * @param lease_file Path to the lease database file.
+ * @param timer_interval Expiration check interval in seconds (0 to disable timer).
+ * @param enable_async_io Enable async I/O queue (true/false).
+ * @return 0 on success, -1 on failure.
+ *
+ * Initializes all server components but does not start threads.
+ * Call dhcp_server_start() to begin operation.
+ */
+int dhcp_server_init(struct dhcp_server_t *server, const char *lease_file,
+                     uint32_t timer_interval, bool enable_async_io);
+
+/**
+ * @brief Start all server components.
+ * @param server Pointer to the dhcp_server_t structure.
+ * @return 0 on success, -1 on failure.
+ *
+ * Starts timer thread and I/O queue (if enabled).
+ */
+int dhcp_server_start(struct dhcp_server_t *server);
+
+/**
+ * @brief Stop all server components and clean up.
+ * @param server Pointer to the dhcp_server_t structure.
+ *
+ * Gracefully stops all threads, saves pending data, and frees resources.
+ */
+void dhcp_server_stop(struct dhcp_server_t *server);
+
+/**
+ * @brief Setup signal handlers for the server.
+ * @param server Pointer to the dhcp_server_t structure.
+ *
+ * Installs signal handlers for:
+ * - SIGINT (Ctrl+C): Graceful shutdown
+ * - SIGTERM: Graceful shutdown
+ * - SIGHUP: Reload configuration (sets reload flag)
+ */
+void dhcp_server_setup_signals(struct dhcp_server_t *server);
+
+/**
+ * @brief Wait for shutdown signal.
+ * @param server Pointer to the dhcp_server_t structure.
+ *
+ * Blocks until a shutdown signal is received (SIGINT or SIGTERM).
+ * Returns when shutdown_requested flag is set.
+ */
+void dhcp_server_wait_for_shutdown(struct dhcp_server_t *server);
+
+/**
+ * @brief Check if reload was requested.
+ * @param server Pointer to the dhcp_server_t structure.
+ * @return true if SIGHUP was received, false otherwise.
+ *
+ * Also clears the reload flag after checking.
+ */
+bool dhcp_server_check_reload(struct dhcp_server_t *server);
+
+/**
+ * @brief Print server statistics.
+ * @param server Pointer to the dhcp_server_t structure.
+ *
+ * Displays information about lease count, I/O queue stats, etc.
+ */
+void dhcp_server_print_stats(const struct dhcp_server_t *server);
 
 #endif // LEASE_V4_H
