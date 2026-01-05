@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "../include/dns_config.h"
+#include "dns_config.h"
 
 int main()
 {
