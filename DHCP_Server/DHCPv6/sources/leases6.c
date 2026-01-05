@@ -172,22 +172,22 @@ static int duid_hex_to_bin(const char* hex, uint8_t *out, uint16_t out_max)
     return (int)n;
 }
 
-static int duid_bin_to_hex(const uint8_t *duid, uint16_t duid_len, char *out,size_t outsz)
-{
-    if(!out || outsz ==0) return -1;
-    if(!duid && duid_len!=0) return -1;
-    size_t need=(duid_len ? (duid_len*3 - 1):0)+1;
-    if(outsz<need) return -1;
-    char *p=out;
-    for(uint16_t i=0;i<duid_len;i++)
-    {
-        int n=snprintf(p,outsz-(size_t)(p-out),(i+1<duid_len)? "%02x:" : "%02x", duid[i]);
-        if(n<0) return -1;
-        p+=n;
-    }
-    *p='\0';
-    return (int)(p-out);
-}  
+// static int duid_bin_to_hex(const uint8_t *duid, uint16_t duid_len, char *out,size_t outsz)
+// {
+//     if(!out || outsz ==0) return -1;
+//     if(!duid && duid_len!=0) return -1;
+//     size_t need=(duid_len ? (duid_len*3 - 1):0)+1;
+//     if(outsz<need) return -1;
+//     char *p=out;
+//     for(uint16_t i=0;i<duid_len;i++)
+//     {
+//         int n=snprintf(p,outsz-(size_t)(p-out),(i+1<duid_len)? "%02x:" : "%02x", duid[i]);
+//         if(n<0) return -1;
+//         p+=n;
+//     }
+//     *p='\0';
+//     return (int)(p-out);
+// }  
 
 const char* lease_v6_state_to_string(lease_state_t s)
 {
@@ -306,7 +306,7 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
     char ip[LEASES6_MAX];
     if(sscanf(p,"lease %95s {",ip)!=1) return -1;
     if(str_to_in6(ip,&L->ip6_addr)!=0) return -1;
-    in6_to_str(&L->ip6_addr,L->ip6_addr_str,sizeof(L->ip6_addr));
+    in6_to_str(&L->ip6_addr,L->ip6_addr_str,sizeof(L->ip6_addr_str));
 
     int seen_starts = 0, seen_ends = 0, seen_any = 0;
 
@@ -674,10 +674,16 @@ dhcpv6_lease_t* lease_v6_add_ia_na(lease_v6_db_t* db,
                                    const char* hostname_opt)
 {
    if (!db || !duid_hex || !ip) return NULL;
+
+   if (db->count >= LEASES6_MAX) {
+        log_error("v6 add IA_NA: lease DB full");
+        return NULL;
+    }
     
     dhcpv6_lease_t* L = &db->leases[db->count];
     memset(L,0,sizeof(*L));
-    L->in_use=1; L->type=Lease6_IA_NA;
+    L->in_use=1; 
+    L->type=Lease6_IA_NA;
     if (duid_hex && *duid_hex){
         int n = duid_hex_to_bin(duid_hex, L->duid, DUID_MAX_LEN);
         if (n < 0) { log_error("v6 add IA_NA: invalid DUID hex"); return NULL; }
@@ -711,6 +717,12 @@ dhcpv6_lease_t* lease_v6_add_ia_pd(lease_v6_db_t* db,
                                    const char* hostname_opt)
 {
     if (!db || db->count>=LEASES6_MAX || !prefix_base) return NULL;
+
+    if (db->count >= LEASES6_MAX) {
+        log_error("v6 add IA_NA: lease DB full");
+        return NULL;
+    }
+
     dhcpv6_lease_t* L = &db->leases[db->count];
     memset(L,0,sizeof(*L));
     L->in_use=1; L->type=Lease6_IA_PD;
@@ -959,3 +971,4 @@ int lease_v6_mark_conflict(lease_v6_db_t* db, const struct in6_addr* ip6_addr, c
     log_warn("v6 conflict on %s (%s)", ipstr, reason ? reason : "probe");
     return lease_v6_set_state(db, ip6_addr, LEASE_STATE_ABANDONED);
 }
+

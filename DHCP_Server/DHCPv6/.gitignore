@@ -1,0 +1,14 @@
+# Build artifacts
+build/
+bin/
+*.o
+*.a
+*.so
+
+# Logs
+*.log
+client_*.log
+
+# System files
+.DS_Store
+.vscode/

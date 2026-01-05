@@ -192,7 +192,6 @@ bool ip6_pool_is_available(struct ip6_pool_t* pool, struct in6_addr ip)
     return (e && e->state == IP6_STATE_AVAILABLE);
 }
 
-/* -------- init / free -------- */
 
 int ip6_pool_init(struct ip6_pool_t* pool, dhcpv6_subnet_t* subnet, lease_v6_db_t* db)
 {
@@ -206,33 +205,54 @@ int ip6_pool_init(struct ip6_pool_t* pool, dhcpv6_subnet_t* subnet, lease_v6_db_
     }
 
     struct in6_addr cur = subnet->pool_start_bin;
-    while (ipv6_compare(&cur, &subnet->pool_end_bin) <= 0) {
-        if (pool->pool_size >= MAX_POOL6_SIZE) break;
+    struct in6_addr end = subnet->pool_end_bin;
+
+    char s_start[INET6_ADDRSTRLEN], s_end[INET6_ADDRSTRLEN], s_cur[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &cur, s_start, sizeof(s_start));
+    inet_ntop(AF_INET6, &end, s_end, sizeof(s_end));
+    int iterations = 0;
+
+   while (ipv6_compare(&cur, &end) <= 0) {
+        
+
+        
+        // Limit processing to prevent infinite loops on large ranges
+        if (iterations++ > 50000) {
+            log_warn("Pool init limit reached (50k IPs), stopping.");
+            break;
+        }
+
+        if (pool->pool_size >= MAX_POOL6_SIZE) {
+            log_info("Pool full (capped at %d)", MAX_POOL6_SIZE);
+            break;
+        }
+
         struct ip6_pool_entry_t* e = &pool->entries[pool->pool_size++];
         memset(e, 0, sizeof(*e));
         e->ip_address = cur;
         e->state = IP6_STATE_AVAILABLE;
         pool->available_count++;
-        if (!ipv6_increment(&cur)) break; 
+
+        // Increment
+        if (!ipv6_increment(&cur)) {
+            break; 
+        }
     }
 
-    for (uint16_t i = 0; i < subnet->host_count; ++i) {
-        const dhcpv6_static_host_t* h = &subnet->hosts[i];
-        if (!h->has_fixed_address6_bin) continue;
-        struct ip6_pool_entry_t* e = ip6_pool_find_entry(pool, h->fixed_addr6_bin);
-        if (!e) continue;
-        if (e->state == IP6_STATE_AVAILABLE && pool->available_count)
-            pool->available_count--;
-        e->state = IP6_STATE_RESERVED;
-        pool->reserved_count++;
-        if (h->duid[0]) strncpy(e->duid, h->duid, sizeof(e->duid)-1);
-    }
-
-  
     if (db) (void)ip6_pool_sync_with_leases(pool, db);
 
+   for (uint16_t i = 0; i < subnet->host_count; ++i) {
+        const dhcpv6_static_host_t* h = &subnet->hosts[i];
+        if (!h->has_fixed_address6_bin) continue;
+
+        
+        (void)ip6_pool_reserve_ip(pool, h->fixed_addr6_bin,
+                                  h->duid[0] ? h->duid : NULL);
+    }
+
     log_info("ip6_pool_init: size=%u available=%u allocated=%u reserved=%u",
-             pool->pool_size, pool->available_count, pool->allocated_count, pool->reserved_count);
+             pool->pool_size, pool->available_count,
+             pool->allocated_count, pool->reserved_count);
     return 0;
 }
 
@@ -242,7 +262,6 @@ void ip6_pool_free(struct ip6_pool_t* pool)
     memset(pool, 0, sizeof(*pool));
 }
 
-/* -------- sync cu leases -------- */
 
 int ip6_pool_update_from_lease(struct ip6_pool_t* pool, dhcpv6_lease_t* L)
 {
@@ -251,22 +270,50 @@ int ip6_pool_update_from_lease(struct ip6_pool_t* pool, dhcpv6_lease_t* L)
     if (!e) return 0; 
 
    
-    if (e->state == IP6_STATE_AVAILABLE && pool->available_count) pool->available_count--;
-    if (e->state == IP6_STATE_ALLOCATED && pool->allocated_count) pool->allocated_count--;
-    if (e->state == IP6_STATE_RESERVED  && pool->reserved_count)  pool->reserved_count--;
+    switch (e->state) {
+        case IP6_STATE_AVAILABLE:
+            if (pool->available_count) pool->available_count--;
+            break;
+        case IP6_STATE_ALLOCATED:
+            if (pool->allocated_count) pool->allocated_count--;
+            break;
+        case IP6_STATE_RESERVED:
+            if (pool->reserved_count) pool->reserved_count--;
+            break;
+        default:
+            break;
+    }
 
     ip6_state_t ns = ip6_state_from_lease_state(L->state);
     e->state = ns;
 
-    if (ns == IP6_STATE_ALLOCATED) {
-        e->last_allocated = L->starts;
-        pool->allocated_count++;
-    } else if (ns == IP6_STATE_AVAILABLE) {
+   if (ns == IP6_STATE_ALLOCATED || ns == IP6_STATE_RESERVED) {
+        if (L->duid_len > 0) {
+            if (duid_bin_to_hex(L->duid, L->duid_len, e->duid, sizeof(e->duid)) < 0) {
+                e->duid[0] = '\0';
+            }
+        } else {
+            e->duid[0] = '\0';
+        }
+    } else {
         e->duid[0] = '\0';
-        pool->available_count++;
-    } else if (ns == IP6_STATE_RESERVED) {
-        pool->reserved_count++;
     }
+
+    switch (ns) {
+        case IP6_STATE_AVAILABLE:
+            pool->available_count++;
+            break;
+        case IP6_STATE_ALLOCATED:
+            pool->allocated_count++;
+            e->last_allocated = L->starts;
+            break;
+        case IP6_STATE_RESERVED:
+            pool->reserved_count++;
+            break;
+        default:
+            break;
+    }
+
    
     return 0;
 }
@@ -325,13 +372,19 @@ int ip6_pool_reserve_ip(struct ip6_pool_t* pool, struct in6_addr ip, const char*
     struct ip6_pool_entry_t* e = ip6_pool_find_entry(pool, ip);
     if (!e) return -1;
 
-    if (e->state == IP6_STATE_AVAILABLE) {
-        if (pool->available_count) pool->available_count--;
-        pool->allocated_count++;
-    }
-    e->state = IP6_STATE_ALLOCATED;
+    if (e->state == IP6_STATE_AVAILABLE && pool->available_count) pool->available_count--;
+    if (e->state == IP6_STATE_ALLOCATED && pool->allocated_count) pool->allocated_count--;
+    if (e->state == IP6_STATE_RESERVED  && pool->reserved_count)  pool->reserved_count--;
+
+    e->state = IP6_STATE_RESERVED;
     e->last_allocated = time(NULL);
-    if (duid && *duid) strncpy(e->duid, duid, sizeof(e->duid)-1);
+
+    if (duid && *duid) {
+        e->duid[0] = '\0';
+        strncpy(e->duid, duid, sizeof(e->duid)-1);
+    }
+
+    pool->reserved_count++;
     return 0;
 }
 
@@ -340,6 +393,7 @@ int ip6_pool_reserve_ip(struct ip6_pool_t* pool, struct in6_addr ip, const char*
 struct ip6_allocation_result_t
 ip6_pool_allocate(struct ip6_pool_t* pool,
                   const char* duid,
+                  uint16_t duid_len,
                   uint32_t iaid,
                   const char* hostname_opt,
                   struct in6_addr requested_ip,
@@ -354,7 +408,8 @@ ip6_pool_allocate(struct ip6_pool_t* pool,
         return R;
     }
 
-    bool do_probe=false; uint32_t tmo=0;
+    bool do_probe=false;
+    uint32_t tmo=0;
     get_effective_probe(config, pool->subnet, &do_probe, &tmo);
 
   
@@ -381,7 +436,7 @@ ip6_pool_allocate(struct ip6_pool_t* pool,
             strncpy(e->duid, duid, sizeof(e->duid)-1);
 
           
-            if (!lease_v6_add_ia_na(db, duid, 0, iaid, &e->ip_address, lease_time, hostname_opt)) {
+            if (!lease_v6_add_ia_na(db, duid, duid_len, iaid, &e->ip_address, lease_time, hostname_opt)) {
               
                 e->state = IP6_STATE_AVAILABLE;
                 e->duid[0] = '\0';
@@ -423,7 +478,7 @@ ip6_pool_allocate(struct ip6_pool_t* pool,
                 e->last_allocated = time(NULL);
                 strncpy(e->duid, duid, sizeof(e->duid)-1);
 
-                if (!lease_v6_add_ia_na(db, duid, 0, iaid, &e->ip_address, lease_time, hostname_opt)) {
+                if (!lease_v6_add_ia_na(db, duid, duid_len, iaid, &e->ip_address, lease_time, hostname_opt)) {
                     e->state = IP6_STATE_AVAILABLE;
                     e->duid[0] = '\0';
                     if (pool->allocated_count) pool->allocated_count--;
@@ -451,15 +506,13 @@ ip6_pool_allocate(struct ip6_pool_t* pool,
         e->last_allocated = time(NULL);
         strncpy(e->duid, duid, sizeof(e->duid)-1);
 
-        if (!lease_v6_add_ia_na(db, duid, 0, iaid, &e->ip_address, lease_time, hostname_opt)) {
+        if (!lease_v6_add_ia_na(db, duid, duid_len, iaid, &e->ip_address, lease_time, hostname_opt)) {
             e->state = IP6_STATE_AVAILABLE;
             e->duid[0] = '\0';
             if (pool->allocated_count) pool->allocated_count--;
             pool->available_count++;
             snprintf(R.error_message, sizeof(R.error_message), "lease persist failed");
-            if (R.success) {
-            goto end_and_save; 
-            }
+            continue;
         }
         R.success = true;
         R.ip_address = e->ip_address; 
