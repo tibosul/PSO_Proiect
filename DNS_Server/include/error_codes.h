@@ -1,0 +1,15 @@
+#ifndef ERROR_CODES_H
+#define ERROR_CODES_H
+
+#define ERR_GENERIC -1
+#define ERR_NO_MEMORY -2
+#define ERR_INVALID_ARGUMENT -3
+#define ERR_NOT_FOUND -4
+#define ERR_ALREADY_EXISTS -5
+#define ERR_INPUT_OUTPUT -6
+#define ERR_FAILED_MALLOC -7
+#define ERR_INVALID_LENGTH -8
+#define ERR_PTR_OUT_OF_BUFFER_RANGE -9
+#define ERR_OUT_OF_BUFFER_SPACE -10
+
+#endif 
