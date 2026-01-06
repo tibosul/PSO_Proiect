@@ -242,7 +242,7 @@ int main(int argc, char *argv[])
     }
 
     // 5. Initialize Thread Pool
-    thread_pool_t *tpool = thread_pool_create(4, 1024);
+    struct thread_pool_t *tpool = thread_pool_create(4, 1024);
     if (!tpool)
     {
         fprintf(stderr, "Failed to create thread pool\n");
