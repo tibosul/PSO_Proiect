@@ -68,7 +68,7 @@ uint8_t get_dhcp_message_type(const struct dhcp_packet* packet) {
         return 0;
     }
     
-    while (offset < 312) {
+    while (offset < DHCP_OPTIONS_SIZE) {
         uint8_t code = packet->options[offset];
         
         if (code == DHCP_OPT_END) break;
@@ -101,7 +101,7 @@ int get_dhcp_requested_ip(const struct dhcp_packet* packet, struct in_addr* ip) 
         return -1;
     }
     
-    while (offset < 312) {
+    while (offset < DHCP_OPTIONS_SIZE) {
         uint8_t code = packet->options[offset];
         
         if (code == DHCP_OPT_END) break;
@@ -130,7 +130,7 @@ int add_dhcp_option(struct dhcp_packet* packet, uint8_t option_code, uint8_t len
     int offset = 4;
     
     // Find end of options
-    while (offset < 308) {
+    while (offset < (DHCP_OPTIONS_SIZE - 4)) {
         if (packet->options[offset] == DHCP_OPT_END) {
             break;
         }
@@ -144,7 +144,7 @@ int add_dhcp_option(struct dhcp_packet* packet, uint8_t option_code, uint8_t len
     }
     
     // Check space
-    if (offset + 2 + len + 1 > 312) {
+    if (offset + 2 + len + 1 > DHCP_OPTIONS_SIZE) {
         return -1;
     }
     

@@ -39,6 +39,7 @@ int get_mac_address(const char* ifname, uint8_t* mac) {
     
     struct ifreq ifr;
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
+    ifr.ifr_name[IFNAMSIZ-1] = '\0';
     
     if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
         close(fd);

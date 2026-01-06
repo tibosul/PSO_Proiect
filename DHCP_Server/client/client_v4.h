@@ -8,6 +8,7 @@
 #define DHCP_CLIENT_PORT 68
 #define DHCP_SERVER_PORT 67
 #define BUF_SIZE_V4 1024
+#define DHCP_OPTIONS_SIZE 312
 
 typedef enum {
     STATE_V4_INIT,
