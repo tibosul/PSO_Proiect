@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 
 bool is_valid_ipv6(const char *ip_str)

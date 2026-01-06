@@ -49,6 +49,7 @@ static void build_timestamp(char *dst, size_t dst_sz)
 
 
 /** Append formatted string to buffer, truncating if necessary */
+__attribute__((unused))
 static void buff_append_format(char *buf, int buf_sz, int *len, const char *fmt, va_list ap)
 {
 

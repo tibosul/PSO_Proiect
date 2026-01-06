@@ -254,7 +254,7 @@ ssize_t dhcpv6_build_ia_na_reply(uint8_t msg_type,
         dhcpv6_option_t *opt = (dhcpv6_option_t *)(out_buf + pos); \
         opt->code = htons(code_mac); \
         opt->len  = htons(vlen_mac); \
-        if ((vlen_mac) && (val_mac)) \
+        if ((vlen_mac) > 0) \
             memcpy(opt->value, (val_mac), (vlen_mac)); \
         pos += sizeof(dhcpv6_option_t) + (vlen_mac); \
     } while(0)
