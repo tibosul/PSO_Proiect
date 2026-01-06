@@ -1,0 +1,29 @@
+# Build
+build/
+
+# Logs
+logs/
+*.log
+
+# Tests
+*test*
+
+# Data files
+DHCPv4/data/
+DHCPv6/leases/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compiled
+*.o
+*.a
+*.so
