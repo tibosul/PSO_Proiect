@@ -259,20 +259,38 @@ void build_renew(struct dhcp_packet* packet, uint32_t xid, uint8_t* mac,
 
 int main(int argc, char** argv)
 {
-    // Initialize logger
-    init_logger("[DHCPv4-Client]", LOG_INFO, false, NULL);
+    // Initialize logger - logs to file logs/dhcpv4_client.log
+    init_logger("[DHCPv4-Client]", LOG_INFO, true, "logs/dhcpv4_client.log");
 
     // --- Argument Parsing ---
     char* ifname = NULL;
+    char* server_ip = NULL;
+    int server_port = DHCP_SERVER_PORT;
 
-    if (argc < 2)
+    for (int i = 1; i < argc; i++)
     {
-        log_error("Usage: %s <interface>", argv[0]);
+        if (strcmp(argv[i], "-s") == 0 && i + 1 < argc)
+        {
+            server_ip = argv[++i];
+        }
+        else if (strcmp(argv[i], "-p") == 0 && i + 1 < argc)
+        {
+            server_port = atoi(argv[++i]);
+        }
+        else if (ifname == NULL)
+        {
+            ifname = argv[i];
+        }
+    }
+
+    if (ifname == NULL)
+    {
+        log_error("Usage: %s <interface> [-s server_ip] [-p port]", argv[0]);
+        log_error("  -s : Server IP (unicast instead of broadcast)");
+        log_error("  -p : Server port (default: 67)");
         close_logger();
         return 1;
     }
-
-    ifname = argv[1];
 
     // --- Interface Setup ---
     int ifindex = get_if_index_v4(ifname);
@@ -332,12 +350,30 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    // Destination: Broadcast to server
+    // Destination: Broadcast or unicast to server
     struct sockaddr_in dest_addr;
     memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(DHCP_SERVER_PORT);
-    dest_addr.sin_addr.s_addr = INADDR_BROADCAST;
+    dest_addr.sin_port = htons(server_port);
+
+    if (server_ip != NULL)
+    {
+        // Unicast to specific server (for testing)
+        if (inet_pton(AF_INET, server_ip, &dest_addr.sin_addr) != 1)
+        {
+            log_error("Invalid server IP: %s", server_ip);
+            close(sock);
+            close_logger();
+            return 1;
+        }
+        log_info("Using unicast to server %s:%d", server_ip, server_port);
+    }
+    else
+    {
+        // Broadcast (normal DHCP behavior)
+        dest_addr.sin_addr.s_addr = INADDR_BROADCAST;
+        log_info("Using broadcast to port %d", server_port);
+    }
     
     // --- State Machine ---
     client_state_v4_t state = STATE_V4_INIT;

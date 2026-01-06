@@ -304,7 +304,7 @@ void* dhcpv6_agent_start(void* arg) {
     
     running = 1; 
 
-    init_logger("[DHCPv6]", LOG_DEBUG, true, "logs/dhcpv6.log");
+    init_logger("[DHCPv6-Server]", LOG_DEBUG, true, "logs/dhcpv6_server.log");
     log_info("Starting DHCPv6 Server (Multi-threaded with %d threads)...", THREAD_POOL_SIZE);
     
     // Load config

@@ -19,8 +19,8 @@
 
 // Constants
 #define RECV_BUF_SIZE 1024
-#define SERVER_CONFIG_FILE "config/dhcpv4.conf"
-#define LEASE_DB_FILE "data/dhcpd.leases"
+#define SERVER_CONFIG_FILE "DHCPv4/config/dhcpv4.conf"
+#define LEASE_DB_FILE "DHCPv4/data/dhcpv4.leases"
 
 // Global state
 static volatile int g_running = 1;
@@ -109,12 +109,15 @@ void packet_processor(void *arg)
             dest.sin_port = htons(DHCP_CLIENT_PORT);
             if (req->giaddr.s_addr != 0)
                 dest.sin_addr = req->giaddr; // Unicast to relay
+            else if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
+                ; // Loopback - keep original client address for unicast reply
             else
                 dest.sin_addr.s_addr = INADDR_BROADCAST; // Broadcast
 
             sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                    sizeof(dest));
-            log_info("Sent DHCPOFFER for IP %s", inet_ntoa(lease->ip_address));
+            log_info("Sent DHCPOFFER for IP %s to %s", inet_ntoa(lease->ip_address),
+                     inet_ntoa(dest.sin_addr));
         }
         break;
     }
@@ -149,12 +152,15 @@ void packet_processor(void *arg)
                 dest.sin_port = htons(DHCP_CLIENT_PORT);
                 if (req->giaddr.s_addr != 0)
                     dest.sin_addr = req->giaddr;
+                else if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
+                    ; // Loopback - keep original client address
                 else
                     dest.sin_addr.s_addr = INADDR_BROADCAST;
 
                 sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                        sizeof(dest));
-                log_info("Sent DHCPACK for IP %s", inet_ntoa(lease->ip_address));
+                log_info("Sent DHCPACK for IP %s to %s", inet_ntoa(lease->ip_address),
+                         inet_ntoa(dest.sin_addr));
             }
             else
             {
@@ -162,7 +168,10 @@ void packet_processor(void *arg)
                 dhcp_message_make_nak(&res, req,
                                       subnet->router); // Use router IP as server ID
                 dest.sin_port = htons(DHCP_CLIENT_PORT);
-                dest.sin_addr.s_addr = INADDR_BROADCAST;
+                if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
+                    ; // Loopback - keep original client address
+                else
+                    dest.sin_addr.s_addr = INADDR_BROADCAST;
                 sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                        sizeof(dest));
                 log_info("Sent DHCPNAK for IP %s", inet_ntoa(req_ip));
@@ -207,8 +216,8 @@ void packet_processor(void *arg)
 
 int main(int argc, char *argv[])
 {
-    // Initialize logger first - logs to file dhcpv4.log
-    init_logger("[DHCPv4]", LOG_DEBUG, true, "logs/dhcpv4.log");
+    // Initialize logger first - logs to file dhcpv4_server.log
+    init_logger("[DHCPv4-Server]", LOG_DEBUG, true, "logs/dhcpv4_server.log");
 
     log_info("Starting DHCPv4 Server...");
 

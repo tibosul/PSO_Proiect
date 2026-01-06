@@ -78,8 +78,8 @@ void generate_duid(uint8_t* mac, uint8_t* duid, uint16_t* len)
 
 int main(int argc, char** argv)
 {
-    // Initialize logger
-    init_logger("[DHCPv6-Client]", LOG_INFO, false, NULL);
+    // Initialize logger - logs to file logs/dhcpv6_client.log
+    init_logger("[DHCPv6-Client]", LOG_INFO, true, "logs/dhcpv6_client.log");
 
     // --- Argument Parsing ---
     char* ifname = NULL;
