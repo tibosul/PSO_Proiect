@@ -1,6 +1,6 @@
 /*
  * DHCPv4 Client Implementation
- * 
+ *
  * Features:
  * - DISCOVER, OFFER, REQUEST, ACK handshake.
  * - IPv4 Address Assignment.
@@ -18,11 +18,14 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <linux/if.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include <time.h>
 
 #include "../DHCPv4/include/src/dhcp_common.h"
 #include "client_v4.h"
+#include "../logger/logger.h"
 
 /**
  * @brief Retrieves the MAC address of the specified network interface.
@@ -256,34 +259,40 @@ void build_renew(struct dhcp_packet* packet, uint32_t xid, uint8_t* mac,
 
 int main(int argc, char** argv)
 {
+    // Initialize logger
+    init_logger("[DHCPv4-Client]", LOG_INFO, false, NULL);
+
     // --- Argument Parsing ---
     char* ifname = NULL;
-    
+
     if (argc < 2)
     {
-        fprintf(stderr, "Usage: %s <interface>\n", argv[0]);
+        log_error("Usage: %s <interface>", argv[0]);
+        close_logger();
         return 1;
     }
-    
+
     ifname = argv[1];
-    
+
     // --- Interface Setup ---
     int ifindex = get_if_index_v4(ifname);
     if (ifindex == 0)
     {
-        perror("Error getting interface index");
+        log_error("Error getting interface index: %s", strerror(errno));
+        close_logger();
         return 1;
     }
-    
+
     uint8_t mac[6];
     if (get_mac_address_v4(ifname, mac) != 0)
     {
-        perror("Error getting MAC address");
+        log_error("Error getting MAC address: %s", strerror(errno));
+        close_logger();
         return 1;
     }
-    
-    printf("Starting DHCPv4 Client on %s (Index %d)\n", ifname, ifindex);
-    printf("MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+
+    log_info("Starting DHCPv4 Client on %s (Index %d)", ifname, ifindex);
+    log_info("MAC: %02x:%02x:%02x:%02x:%02x:%02x",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     
     // --- Socket Setup ---
@@ -354,25 +363,25 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         if (state == STATE_V4_INIT)
         {
-            printf("[INIT] Sending DHCPDISCOVER...\n");
-            
+            log_info("[INIT] Sending DHCPDISCOVER...");
+
             build_discover(&tx_packet, xid, mac);
-            
+
             if (sendto(sock, &tx_packet, sizeof(tx_packet), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr)) < 0)
             {
-                perror("sendto discover failed");
+                log_error("sendto discover failed: %s", strerror(errno));
             }
-            
+
             state = STATE_V4_SELECTING;
         }
-        
+
         // ---------------------------------------------------------------------
         // STATE: SELECTING
         // Action: Wait for DHCPOFFER from server
         // ---------------------------------------------------------------------
         else if (state == STATE_V4_SELECTING)
         {
-            printf("[SELECTING] Waiting for DHCPOFFER...\n");
+            log_info("[SELECTING] Waiting for DHCPOFFER...");
             
             struct sockaddr_in srv_addr;
             socklen_t slen = sizeof(srv_addr);
@@ -389,33 +398,33 @@ int main(int argc, char** argv)
             {
                 uint32_t rx_xid = ntohl(rx_packet.xid);
                 uint8_t msg_type = get_dhcp_message_type(&rx_packet);
-                
-                printf("[DEBUG] Received message type=%d, XID=0x%x (Expected=0x%x)\n", msg_type, rx_xid, xid);
-                
+
+                log_debug("[DEBUG] Received message type=%d, XID=0x%x (Expected=0x%x)", msg_type, rx_xid, xid);
+
                 if (msg_type == DHCP_OFFER && rx_xid == xid)
                 {
                     offered_ip = rx_packet.yiaddr;
                     get_dhcp_requested_ip(&rx_packet, &server_id);
-                    
-                    printf("[SELECTING] Received DHCPOFFER: IP=%s\n", inet_ntoa(offered_ip));
-                    
+
+                    log_info("[SELECTING] Received DHCPOFFER: IP=%s", inet_ntoa(offered_ip));
+
                     // Send REQUEST
-                    printf("[SELECTING] Sending DHCPREQUEST...\n");
+                    log_info("[SELECTING] Sending DHCPREQUEST...");
                     xid++;
                     build_request(&tx_packet, xid, mac, offered_ip, server_id);
-                    
+
                     if (sendto(sock, &tx_packet, sizeof(tx_packet), 0,
                               (struct sockaddr*)&dest_addr, sizeof(dest_addr)) < 0)
                     {
-                        perror("sendto request failed");
+                        log_error("sendto request failed: %s", strerror(errno));
                     }
-                    
+
                     state = STATE_V4_REQUESTING;
                 }
             }
             else
             {
-                printf("[SELECTING] Timeout waiting for OFFER, retrying...\n");
+                log_warn("[SELECTING] Timeout waiting for OFFER, retrying...");
                 state = STATE_V4_INIT;
                 sleep(1);
             }
@@ -427,50 +436,50 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         else if (state == STATE_V4_REQUESTING)
         {
-            printf("[REQUESTING] Waiting for DHCPACK...\n");
-            
+            log_info("[REQUESTING] Waiting for DHCPACK...");
+
             struct sockaddr_in srv_addr;
             socklen_t slen = sizeof(srv_addr);
-            
+
             struct timeval tv;
             tv.tv_sec = 5;
             tv.tv_usec = 0;
             setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-            
+
             ssize_t len = recvfrom(sock, &rx_packet, sizeof(rx_packet), 0, (struct sockaddr*)&srv_addr, &slen);
-            
+
             if (len > 0)
             {
                 uint32_t rx_xid = ntohl(rx_packet.xid);
                 uint8_t msg_type = get_dhcp_message_type(&rx_packet);
-                
+
                 if (msg_type == DHCP_ACK && rx_xid == xid)
                 {
                     assigned_ip = rx_packet.yiaddr;
-                    
-                    printf("[REQUESTING] Received DHCPACK: IP=%s\n",
+
+                    log_info("[REQUESTING] Received DHCPACK: IP=%s",
                            inet_ntoa(assigned_ip));
-                    
+
                     // Configure the interface with the assigned IP
                     char cmd[256];
                     snprintf(cmd, sizeof(cmd), "ip addr add %s/24 dev %s",
                             inet_ntoa(assigned_ip), ifname);
-                    printf("[EXEC] %s\n", cmd);
-                    
+                    log_info("[EXEC] %s", cmd);
+
                     if (system(cmd) == 0)
                     {
-                        printf("-> IP assigned successfully.\n");
+                        log_info("IP assigned successfully.");
                     }
                     else
                     {
-                        fprintf(stderr, "-> Failed to assign IP.\n");
+                        log_error("Failed to assign IP.");
                     }
-                    
+
                     state = STATE_V4_BOUND;
                 }
                 else if (msg_type == DHCP_NAK)
                 {
-                    printf("[REQUESTING] Received DHCPNAK. Restarting...\n");
+                    log_warn("[REQUESTING] Received DHCPNAK. Restarting...");
                     state = STATE_V4_INIT;
                     xid++;
                     sleep(1);
@@ -478,12 +487,12 @@ int main(int argc, char** argv)
             }
             else
             {
-                printf("[REQUESTING] Timeout waiting for ACK, retrying REQUEST...\n");
+                log_warn("[REQUESTING] Timeout waiting for ACK, retrying REQUEST...");
                 sleep(1);
                 // Retry REQUEST
                 if (sendto(sock, &tx_packet, sizeof(tx_packet), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr)) < 0)
                 {
-                    perror("sendto request retry failed");
+                    log_error("sendto request retry failed: %s", strerror(errno));
                 }
             }
         }
@@ -494,61 +503,61 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         else if (state == STATE_V4_BOUND)
         {
-            printf("[BOUND] Lease acquired. Sleeping for T1 (simulated 30s)...\n");
+            log_info("[BOUND] Lease acquired. Sleeping for T1 (simulated 30s)...");
             sleep(30);
-            
-            printf("[BOUND] T1 expired. Transitioning to RENEWING...\n");
+
+            log_info("[BOUND] T1 expired. Transitioning to RENEWING...");
             state = STATE_V4_RENEWING;
             xid++;
         }
-        
+
         // ---------------------------------------------------------------------
         // STATE: RENEWING
         // Action: Send REQUEST (with ciaddr) to renew the lease
         // ---------------------------------------------------------------------
         else if (state == STATE_V4_RENEWING)
         {
-            printf("[RENEWING] Sending DHCP REQUEST to renew lease...\n");
-            
+            log_info("[RENEWING] Sending DHCP REQUEST to renew lease...");
+
             build_renew(&tx_packet, xid, mac, assigned_ip);
-            
+
             if (sendto(sock, &tx_packet, sizeof(tx_packet), 0,
                       (struct sockaddr*)&dest_addr, sizeof(dest_addr)) < 0)
             {
-                perror("sendto renew failed");
+                log_error("sendto renew failed: %s", strerror(errno));
             }
-            
+
             struct sockaddr_in srv_addr;
             socklen_t slen = sizeof(srv_addr);
-            
+
             struct timeval tv;
             tv.tv_sec = 5;
             tv.tv_usec = 0;
             setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-            
+
             ssize_t len = recvfrom(sock, &rx_packet, sizeof(rx_packet), 0,
                                   (struct sockaddr*)&srv_addr, &slen);
-            
+
             if (len > 0)
             {
                 uint32_t rx_xid = ntohl(rx_packet.xid);
                 uint8_t msg_type = get_dhcp_message_type(&rx_packet);
-                
+
                 if (msg_type == DHCP_ACK && rx_xid == xid)
                 {
-                    printf("[RENEWING] Lease renewed successfully.\n");
+                    log_info("[RENEWING] Lease renewed successfully.");
                     state = STATE_V4_BOUND;
                     xid++;
                 }
                 else if (msg_type == DHCP_NAK)
                 {
-                    printf("[RENEWING] Received NAK. Releasing and restarting...\n");
+                    log_warn("[RENEWING] Received NAK. Releasing and restarting...");
                     // Should release the IP here
                     char cmd[256];
                     snprintf(cmd, sizeof(cmd), "ip addr del %s/24 dev %s",
                             inet_ntoa(assigned_ip), ifname);
                     system(cmd);
-                    
+
                     state = STATE_V4_INIT;
                     xid++;
                     sleep(1);
@@ -556,12 +565,13 @@ int main(int argc, char** argv)
             }
             else
             {
-                printf("[RENEWING] Timeout. Retrying later...\n");
+                log_warn("[RENEWING] Timeout. Retrying later...");
                 sleep(5);
             }
         }
     }
-    
+
     close(sock);
+    close_logger();
     return 0;
 }

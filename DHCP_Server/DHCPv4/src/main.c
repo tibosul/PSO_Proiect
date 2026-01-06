@@ -16,6 +16,7 @@
 #include "../include/src/lease_v4.h"
 #include "../include/utils/network_utils.h"
 #include "../include/utils/thread_pool.h"
+#include "../../logger/logger.h"
 
 // Constants
 #define RECV_BUF_SIZE 1024
@@ -61,7 +62,7 @@ void packet_processor(void *arg)
     // Validate packet
     if (dhcp_message_validate(req, task->len) != 0)
     {
-        printf("Received invalid DHCP packet\n");
+        log_warn("Received invalid DHCP packet");
         free(task);
         return;
     }
@@ -77,7 +78,7 @@ void packet_processor(void *arg)
     // Find correct subnet/pool if multiple exist
     // Implementation omitted for brevity - would check if giaddr matches a subnet
 
-    printf("Processing DHCP message type %d from %s\n", msg_type,
+    log_info("Processing DHCP message type %d from %s", msg_type,
            inet_ntoa(dest.sin_addr));
 
     switch (msg_type)
@@ -114,7 +115,7 @@ void packet_processor(void *arg)
 
             sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                    sizeof(dest));
-            printf("Sent DHCPOFFER for IP %s\n", inet_ntoa(lease->ip_address));
+            log_info("Sent DHCPOFFER for IP %s", inet_ntoa(lease->ip_address));
         }
         break;
     }
@@ -154,7 +155,7 @@ void packet_processor(void *arg)
 
                 sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                        sizeof(dest));
-                printf("Sent DHCPACK for IP %s\n", inet_ntoa(lease->ip_address));
+                log_info("Sent DHCPACK for IP %s", inet_ntoa(lease->ip_address));
             }
             else
             {
@@ -165,7 +166,7 @@ void packet_processor(void *arg)
                 dest.sin_addr.s_addr = INADDR_BROADCAST;
                 sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                        sizeof(dest));
-                printf("Sent DHCPNAK for IP %s\n", inet_ntoa(req_ip));
+                log_info("Sent DHCPNAK for IP %s", inet_ntoa(req_ip));
             }
         }
         // Renewing / Rebinding (Request IP but no Server ID)
@@ -193,12 +194,12 @@ void packet_processor(void *arg)
         {
             lease_db_release_lease(&g_server.lease_db, req->ciaddr);
             ip_pool_release_ip(pool, req->ciaddr);
-            printf("Released IP %s\n", inet_ntoa(req->ciaddr));
+            log_info("Released IP %s", inet_ntoa(req->ciaddr));
         }
         break;
 
     default:
-        printf("Unhandled message type: %d\n", msg_type);
+        log_warn("Unhandled message type: %d", msg_type);
         break;
     }
 
@@ -207,7 +208,10 @@ void packet_processor(void *arg)
 
 int main(int argc, char *argv[])
 {
-    printf("Starting DHCPv4 Server...\n");
+    // Initialize logger first
+    init_logger("[DHCPv4]", LOG_INFO, false, NULL);
+
+    log_info("Starting DHCPv4 Server...");
 
     // 1. Initialize Signal Handlers
     signal(SIGINT, handle_signal);
@@ -220,7 +224,8 @@ int main(int argc, char *argv[])
 
     if (parse_config_file(config_file, &g_server.config) != 0)
     {
-        fprintf(stderr, "Failed to load configuration\n");
+        log_error("Failed to load configuration");
+        close_logger();
         return 1;
     }
     print_config(&g_server.config);
@@ -228,7 +233,8 @@ int main(int argc, char *argv[])
     // 3. Initialize Lease DB
     if (lease_db_init(&g_server.lease_db, LEASE_DB_FILE) != 0)
     {
-        fprintf(stderr, "Failed to initialize lease database\n");
+        log_error("Failed to initialize lease database");
+        close_logger();
         return 1;
     }
     lease_db_load(&g_server.lease_db);
@@ -245,10 +251,11 @@ int main(int argc, char *argv[])
     struct thread_pool_t *tpool = thread_pool_create(4, 1024);
     if (!tpool)
     {
-        fprintf(stderr, "Failed to create thread pool\n");
+        log_error("Failed to create thread pool");
+        close_logger();
         return 1;
     }
-    printf("Thread pool initialized with 4 workers\n");
+    log_info("Thread pool initialized with 4 workers");
 
     // 6. Bind Socket
     if ((g_server.sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -273,17 +280,18 @@ int main(int argc, char *argv[])
     if (bind(g_server.sockfd, (struct sockaddr *)&server_addr,
              sizeof(server_addr)) < 0)
     {
-        perror("bind"); // Note: Needs root or capability to bind port 67
-        printf("Trying to bind to non-privileged port 6767 for testing...\n");
+        log_warn("Failed to bind port 67: %s (needs root/CAP_NET_BIND_SERVICE)", strerror(errno));
+        log_info("Trying to bind to non-privileged port 6767 for testing...");
         server_addr.sin_port = htons(6767); // Fallback
         if (bind(g_server.sockfd, (struct sockaddr *)&server_addr,
                  sizeof(server_addr)) < 0)
         {
-            perror("bind fallback");
+            log_error("Failed to bind fallback port 6767: %s", strerror(errno));
+            close_logger();
             return 1;
         }
     }
-    printf("Server listening on port %d...\n", ntohs(server_addr.sin_port));
+    log_info("Server listening on port %d...", ntohs(server_addr.sin_port));
 
     // 7. Main Loop
     while (g_running)
@@ -311,13 +319,13 @@ int main(int argc, char *argv[])
         // Dispatch to thread pool
         if (thread_pool_add(tpool, packet_processor, task) != 0)
         {
-            fprintf(stderr, "Failed to add task to pool (full?)\n");
+            log_warn("Failed to add task to pool (queue full), dropping packet");
             free(task);
         }
     }
 
     // 8. Cleanup
-    printf("\nShutting down...\n");
+    log_info("Shutting down...");
     thread_pool_destroy(tpool, 0);
     close(g_server.sockfd);
 
@@ -327,6 +335,7 @@ int main(int argc, char *argv[])
     }
     lease_db_free(&g_server.lease_db);
 
-    printf("Server stopped.\n");
+    log_info("Server stopped.");
+    close_logger();
     return 0;
 }

@@ -1,6 +1,6 @@
 /*
  * DHCPv6 Client Implementation
- * 
+ *
  * Features:
  * - Solicit, Advertise, Request, Reply handshake.
  * - IPv6 Address Assignment (IA_NA).
@@ -17,12 +17,15 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <net/if_arp.h>
 #include <netinet/in.h>
+#include <linux/if.h>
 #include <fcntl.h>
 #include <time.h>
 
 #include "../DHCPv6/include/protocol_v6.h"
 #include "../DHCPv6/include/utilsv6.h"
+#include "../logger/logger.h"
 
 #include "client_v6.h"
 
@@ -75,11 +78,14 @@ void generate_duid(uint8_t* mac, uint8_t* duid, uint16_t* len)
 
 int main(int argc, char** argv)
 {
+    // Initialize logger
+    init_logger("[DHCPv6-Client]", LOG_INFO, false, NULL);
+
     // --- Argument Parsing ---
     char* ifname = NULL;
     int request_pd = 0;
     int spoof_byte = -1;
-    
+
     for(int i = 1; i < argc; i++)
     {
         if(strcmp(argv[i], "-P") == 0)
@@ -99,45 +105,52 @@ int main(int argc, char** argv)
             ifname = argv[i];
         }
     }
-    
+
     if (ifname == NULL)
     {
-        fprintf(stderr, "Usage: %s <interface> [-P] [-S hexByte]\n", argv[0]);
-        fprintf(stderr, "  -P : Request Prefix Delegation\n");
-        fprintf(stderr, "  -S : Spoof last byte of MAC (e.g. -S 0A)\n");
+        log_error("Usage: %s <interface> [-P] [-S hexByte]", argv[0]);
+        log_error("  -P : Request Prefix Delegation");
+        log_error("  -S : Spoof last byte of MAC (e.g. -S 0A)");
+        close_logger();
         return 1;
     }
-    
+
     // --- Interface Setup ---
     int ifindex = get_if_index(ifname);
     if (ifindex == 0)
     {
-        perror("Error getting interface index");
+        log_error("Error getting interface index: %s", strerror(errno));
+        close_logger();
         return 1;
     }
-    
+
     uint8_t mac[6];
     if (get_mac_address(ifname, mac) != 0)
     {
-        perror("Error getting MAC address");
+        log_error("Error getting MAC address: %s", strerror(errno));
+        close_logger();
         return 1;
     }
 
     if (spoof_byte >= 0)
     {
         mac[5] = (uint8_t)spoof_byte;
-        printf("DEBUG: Spoofing MAC last byte to %02X\n", mac[5]);
+        log_debug("DEBUG: Spoofing MAC last byte to %02X", mac[5]);
     }
-    
+
     uint8_t client_duid[20];
     uint16_t client_duid_len;
     generate_duid(mac, client_duid, &client_duid_len);
-    
-    printf("Starting DHCPv6 Client on %s (Index %d)\n", ifname, ifindex);
-    if (request_pd) printf("Option: Prefix Delegation Enabled (-P)\n");
-    printf("DUID: ");
-    for(int i = 0; i < client_duid_len; i++) printf("%02x", client_duid[i]);
-    printf("\n");
+
+    log_info("Starting DHCPv6 Client on %s (Index %d)", ifname, ifindex);
+    if (request_pd) log_info("Option: Prefix Delegation Enabled (-P)");
+
+    char duid_str[128];
+    int pos = 0;
+    for(int i = 0; i < client_duid_len; i++) {
+        pos += snprintf(duid_str + pos, sizeof(duid_str) - pos, "%02x", client_duid[i]);
+    }
+    log_info("DUID: %s", duid_str);
     
     // --- Socket Setup ---
     int sock = socket(AF_INET6, SOCK_DGRAM, 0);
@@ -198,7 +211,7 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         if (state == STATE_INIT)
         {
-            printf("[INIT] Sending SOLICIT...\n");
+            log_info("[INIT] Sending SOLICIT...");
             
             // Init Header
             dhcpv6_header_t* hdr = (dhcpv6_header_t*)buf;
@@ -249,22 +262,22 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         else if (state == STATE_SOLICITING)
         {
-            printf("[SOLICITING] Waiting for ADVERTISE...\n");
+            log_info("[SOLICITING] Waiting for ADVERTISE...");
             struct sockaddr_in6 srv_addr;
             socklen_t slen = sizeof(srv_addr);
             ssize_t len = recvfrom(sock, rx_buf, BUF_SIZE, 0, (struct sockaddr*)&srv_addr, &slen);
-            
+
             if (len > 0)
             {
-                printf("[DEBUG] Packet received (%zd bytes)\n", len);
+                log_debug("[DEBUG] Packet received (%zd bytes)", len);
                 dhcpv6_packet_meta_t meta;
                 if (dhcpv6_parse(rx_buf, len, &meta) == 0)
                 {
-                    printf("[DEBUG] Parsed: Type=%d, XID=0x%x (Expected XID=0x%x)\n", 
+                    log_debug("[DEBUG] Parsed: Type=%d, XID=0x%x (Expected XID=0x%x)",
                            meta.msg_type, meta.transaction_id, xid);
                     if (meta.msg_type == MSG_ADVERTISE && meta.transaction_id == xid)
                     {
-                        printf("[SOLICITING] Received ADVERTISE. Transitioning to REQUEST...\n");
+                        log_info("[SOLICITING] Received ADVERTISE. Transitioning to REQUEST...");
                         
                         // Build REQUEST message based on ADVERTISE
                         dhcpv6_header_t* hdr = (dhcpv6_header_t*)buf;
@@ -337,11 +350,11 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         else if (state == STATE_REQUESTING)
         {
-            printf("[REQUESTING] Waiting for REPLY...\n");
+            log_info("[REQUESTING] Waiting for REPLY...");
             struct sockaddr_in6 srv_addr;
             socklen_t slen = sizeof(srv_addr);
             ssize_t len = recvfrom(sock, rx_buf, BUF_SIZE, 0, (struct sockaddr*)&srv_addr, &slen);
-            
+
              if (len > 0)
              {
                 dhcpv6_packet_meta_t meta;
@@ -349,7 +362,7 @@ int main(int argc, char** argv)
                 {
                     if (meta.msg_type == MSG_REPLY && meta.transaction_id == xid)
                     {
-                         printf("[REQUESTING] Received REPLY.\n");
+                         log_info("[REQUESTING] Received REPLY.");
                          
                          // Update Server DUID if present (it should be)
                          if (meta.server_duid && meta.server_duid_len > 0)
@@ -366,44 +379,44 @@ int main(int argc, char** argv)
                          {
                              char ip_str[INET6_ADDRSTRLEN];
                              inet_ntop(AF_INET6, &meta.requested_ip, ip_str, sizeof(ip_str));
-                             printf("  [IA_NA] Assigned IP: %s\n", ip_str);
-                             
+                             log_info("  [IA_NA] Assigned IP: %s", ip_str);
+
                              char cmd[512];
                              snprintf(cmd, sizeof(cmd), "ip -6 addr add %s/64 dev %s", ip_str, ifname);
-                             printf("  [EXEC] %s\n", cmd);
+                             log_info("  [EXEC] %s", cmd);
                              if (system(cmd) == 0)
                              {
-                                 printf("  -> IP assigned successfully.\n");
+                                 log_info("  -> IP assigned successfully.");
                              }
                              else
                              {
-                                 fprintf(stderr, "  -> Failed to assign IP.\n");
+                                 log_error("  -> Failed to assign IP.");
                              }
                          }
-                         
+
                          // --- Process IA_PD (Prefix Delegation) ---
                          if (request_pd && meta.has_ia_pd && meta.has_requested_prefix)
                          {
                              char pfx_str[INET6_ADDRSTRLEN];
                              inet_ntop(AF_INET6, &meta.requested_prefix, pfx_str, sizeof(pfx_str));
-                             printf("  [IA_PD] Delegated Prefix: %s/%d\n", pfx_str, meta.requested_plen);
-                             
+                             log_info("  [IA_PD] Delegated Prefix: %s/%d", pfx_str, meta.requested_plen);
+
                              // Construct address: <prefix>::1
                              struct in6_addr pd_addr = meta.requested_prefix;
-                             pd_addr.s6_addr[15] = 1; 
-                             
+                             pd_addr.s6_addr[15] = 1;
+
                              char full_ip[INET6_ADDRSTRLEN];
                              inet_ntop(AF_INET6, &pd_addr, full_ip, sizeof(full_ip));
-                             
+
                              char cmd[512];
                              snprintf(cmd, sizeof(cmd), "ip -6 addr add %s/64 dev %s", full_ip, ifname);
-                             printf("  [EXEC] %s\n", cmd);
+                             log_info("  [EXEC] %s", cmd);
                              if (system(cmd) == 0) {
-                                 printf("  -> Prefix address assigned successfully.\n");
+                                 log_info("  -> Prefix address assigned successfully.");
                              }
                              else
                              {
-                                 fprintf(stderr, "  -> Failed to assign prefix address.\n");
+                                 log_error("  -> Failed to assign prefix address.");
                              }
                          }
                          
@@ -421,11 +434,11 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         else if (state == STATE_BOUND)
         {
-             printf("[BOUND] Lease acquired. Sleeping for T1 (simulated 15s)...\n");
-             sleep(15); 
+             log_info("[BOUND] Lease acquired. Sleeping for T1 (simulated 15s)...");
+             sleep(15);
              // In real app, we parse T1. Here we simulate.
-             
-             printf("[BOUND] T1 expired. Transitioning to RENEWING...\n");
+
+             log_info("[BOUND] T1 expired. Transitioning to RENEWING...");
              state = STATE_RENEWING;
              xid++;
         }
@@ -437,21 +450,21 @@ int main(int argc, char** argv)
         // ---------------------------------------------------------------------
         else if (state == STATE_RENEWING)
         {
-             printf("[RENEWING] Sending RENEW...\n");
-             
+             log_info("[RENEWING] Sending RENEW...");
+
              // Build RENEW message
              dhcpv6_header_t* hdr = (dhcpv6_header_t*)buf;
              hdr->msg_type = MSG_RENEW;
              dhcpv6_set_xid(hdr, xid);
              int pos = sizeof(dhcpv6_header_t);
-             
+
              // Client ID
              dhcpv6_option_t* opt = (dhcpv6_option_t*)(buf + pos);
              opt->code = htons(OPT_CLIENTID);
              opt->len = htons(client_duid_len);
              memcpy(opt->value, client_duid, client_duid_len);
              pos += sizeof(dhcpv6_option_t) + client_duid_len;
-             
+
              // Server ID (Required for RENEW)
              if (server_duid_len > 0)
              {
@@ -461,7 +474,7 @@ int main(int argc, char** argv)
                  memcpy(opt->value, server_duid, server_duid_len);
                  pos += sizeof(dhcpv6_option_t) + server_duid_len;
              }
-             
+
              // IA_NA
              opt = (dhcpv6_option_t*)(buf + pos);
              opt->code = htons(OPT_IA_NA);
@@ -470,7 +483,7 @@ int main(int argc, char** argv)
              p32[0] = htonl(iaid);
              p32[1] = 0; p32[2] = 0;
              pos += sizeof(dhcpv6_option_t) + 12;
-             
+
              // IA_PD
              if (request_pd)
              {
@@ -482,18 +495,18 @@ int main(int argc, char** argv)
                  p32[1] = 0; p32[2] = 0;
                  pos += sizeof(dhcpv6_option_t) + 12;
              }
-             
+
              if (sendto(sock, buf, pos, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr)) < 0)
              {
-                 perror("send renew failed");
+                 log_error("send renew failed: %s", strerror(errno));
              }
-             
+
              // Wait for REPLY
-             printf("[RENEWING] Waiting for REPLY...\n");
+             log_info("[RENEWING] Waiting for REPLY...");
              struct sockaddr_in6 srv_addr;
              socklen_t slen = sizeof(srv_addr);
              ssize_t len = recvfrom(sock, rx_buf, BUF_SIZE, 0, (struct sockaddr*)&srv_addr, &slen);
-             
+
              if (len > 0)
              {
                  dhcpv6_packet_meta_t meta;
@@ -501,8 +514,8 @@ int main(int argc, char** argv)
                  {
                      if (meta.msg_type == MSG_REPLY && meta.transaction_id == xid)
                      {
-                         printf("[RENEWING] Received REPLY. Lease renewed.\n");
-                         
+                         log_info("[RENEWING] Received REPLY. Lease renewed.");
+
                          // Loop back to BOUND
                          state = STATE_BOUND;
                          xid++;
@@ -511,14 +524,15 @@ int main(int argc, char** argv)
              }
              else
              {
-                 // Timeout or error: Keep retrying or go to REBIND. 
+                 // Timeout or error: Keep retrying or go to REBIND.
                  // For demo, just retry RENEW loop or go back to BOUND to retry later
-                 printf("[RENEWING] No reply / Timeout. Retrying later...\n");
+                 log_warn("[RENEWING] No reply / Timeout. Retrying later...");
                  sleep(5);
              }
         }
     }
-    
+
     close(sock);
+    close_logger();
     return 0;
 }
