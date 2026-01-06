@@ -101,11 +101,15 @@ void lease_db_free(struct lease_database_t *db)
 }
 
 // Generate next unique lease ID
+// Thread-safe: uses atomic operation to prevent race conditions
 uint64_t lease_db_generate_id(struct lease_database_t *db)
 {
     if (!db)
         return 0;
-    return db->next_lease_id++;
+
+    // Use atomic fetch-and-add to ensure thread-safety
+    // This works even if called without holding the db_mutex
+    return __atomic_fetch_add(&db->next_lease_id, 1, __ATOMIC_SEQ_CST);
 }
 
 // Find lease by ID (stable reference)
@@ -351,9 +355,13 @@ int lease_db_load(struct lease_database_t *db)
                     else
                     {
                         // Update next_lease_id to be higher than any existing
-                        if (db->leases[db->lease_count].lease_id >= db->next_lease_id)
+                        // Use atomic operation for thread-safety
+                        uint64_t current_id = db->leases[db->lease_count].lease_id;
+                        uint64_t expected = __atomic_load_n(&db->next_lease_id, __ATOMIC_SEQ_CST);
+
+                        if (current_id >= expected)
                         {
-                            db->next_lease_id = db->leases[db->lease_count].lease_id + 1;
+                            __atomic_store_n(&db->next_lease_id, current_id + 1, __ATOMIC_SEQ_CST);
                         }
                     }
 
@@ -632,7 +640,10 @@ struct dhcp_lease_t *lease_db_add_lease(struct lease_database_t *db, struct in_a
     lease->is_bootp = false;
 
     db->lease_count++;
-    lease_db_append_lease(db, lease);
+
+    // Note: I/O is not performed here to keep the function fast and avoid
+    // holding locks during disk operations. Caller should use lease_db_append_lease()
+    // or the I/O queue (lease_io_queue_save_lease) to persist changes.
 
     return lease;
 }
@@ -683,7 +694,7 @@ int lease_db_release_lease(struct lease_database_t *db, struct in_addr ip)
     // Update string representation
     strncpy(lease->binding_state, "released", sizeof(lease->binding_state) - 1);
 
-    lease_db_save(db);
+    // Note: Caller should persist changes using lease_db_save() or I/O queue
     return 0;
 }
 
@@ -708,7 +719,7 @@ int lease_db_renew_lease(struct lease_database_t *db, struct in_addr ip, uint32_
     // Update string representation
     strncpy(lease->binding_state, "active", sizeof(lease->binding_state) - 1);
 
-    lease_db_save(db);
+    // Note: Caller should persist changes using lease_db_save() or I/O queue
     return 0;
 }
 
@@ -732,10 +743,8 @@ int lease_db_expire_old_leases(struct lease_database_t *db)
         }
     }
 
-    if (expired_count > 0)
-    {
-        lease_db_save(db);
-    }
+    // Note: Caller should persist changes using lease_db_save() or I/O queue
+    // Removed automatic save to avoid slow I/O operations during lease expiration
 
     return expired_count;
 }
@@ -764,10 +773,8 @@ int lease_db_cleanup_expired(struct lease_database_t *db)
         }
     }
 
-    if (removed > 0)
-    {
-        lease_db_save(db);
-    }
+    // Note: Caller should persist changes using lease_db_save() or I/O queue
+    // Removed automatic save to avoid slow I/O operations during cleanup
 
     return removed;
 }
@@ -896,16 +903,28 @@ void lease_db_unlock(struct lease_database_t *db)
     }
 }
 
-struct dhcp_lease_t *lease_db_add_lease_safe(struct lease_database_t *db, struct in_addr ip, const uint8_t mac[6], uint32_t lease_time)
+uint64_t lease_db_add_lease_safe(struct lease_database_t *db, struct in_addr ip, const uint8_t mac[6], uint32_t lease_time, struct dhcp_lease_t *out_lease)
 {
     if (!db)
-        return NULL;
+        return 0;
 
     lease_db_lock(db);
     struct dhcp_lease_t *result = lease_db_add_lease(db, ip, mac, lease_time);
+    uint64_t lease_id = 0;
+
+    if (result)
+    {
+        lease_id = result->lease_id;
+        // Copy lease data to output buffer if provided
+        if (out_lease)
+        {
+            memcpy(out_lease, result, sizeof(struct dhcp_lease_t));
+        }
+    }
+
     lease_db_unlock(db);
 
-    return result;
+    return lease_id;
 }
 
 int lease_db_find_by_ip_safe(struct lease_database_t *db, struct in_addr ip, struct dhcp_lease_t *out_lease)
@@ -915,16 +934,19 @@ int lease_db_find_by_ip_safe(struct lease_database_t *db, struct in_addr ip, str
 
     lease_db_lock(db);
 
-    struct dhcp_lease_t *lease = lease_db_find_by_ip(db, ip);
-    if (lease)
+    int result = -1;
+    for (uint32_t i = 0; i < db->lease_count; i++)
     {
-        memcpy(out_lease, lease, sizeof(struct dhcp_lease_t));
-        lease_db_unlock(db);
-        return 0;
+        if (db->leases[i].ip_address.s_addr == ip.s_addr)
+        {
+            memcpy(out_lease, &db->leases[i], sizeof(struct dhcp_lease_t));
+            result = 0;
+            break;
+        }
     }
 
     lease_db_unlock(db);
-    return -1;
+    return result;
 }
 
 int lease_db_find_by_mac_safe(struct lease_database_t *db, const uint8_t mac[6], struct dhcp_lease_t *out_lease)
