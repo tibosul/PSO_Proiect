@@ -208,8 +208,8 @@ void packet_processor(void *arg)
 
 int main(int argc, char *argv[])
 {
-    // Initialize logger first
-    init_logger("[DHCPv4]", LOG_INFO, false, NULL);
+    // Initialize logger first - logs to file dhcpv4.log
+    init_logger("[DHCPv4]", LOG_DEBUG, true, "dhcpv4.log");
 
     log_info("Starting DHCPv4 Server...");
 
