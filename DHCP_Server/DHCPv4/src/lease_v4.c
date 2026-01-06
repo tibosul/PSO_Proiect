@@ -364,8 +364,7 @@ int lease_db_load(struct lease_database_t *db)
     }
 
     fclose(fp);
-    printf("Loaded %u leases from %s (next ID: %lu)\n",
-           db->lease_count, db->filename, db->next_lease_id);
+    printf("Loaded %u leases from %s (next ID: %lu)\n", db->lease_count, db->filename, db->next_lease_id);
     return 0;
 }
 
@@ -486,11 +485,10 @@ int lease_db_save(struct lease_database_t *db)
         // Write vendor class identifier if present
         if (strlen(lease->vendor_class_identifier) > 0)
         {
-            fprintf(fp, "\tvendor-class-identifier \"%s\";\n",
-                    lease->vendor_class_identifier);
+            fprintf(fp, "\tvendor-class-identifier \"%s\";\n", lease->vendor_class_identifier);
         }
 
-        // Write abandoned flag if set
+                // Write abandoned flag if set
         if (lease->is_abandoned)
         {
             fprintf(fp, "\tabandoned;\n");
@@ -1514,8 +1512,7 @@ static void dhcp_server_signal_handler(int signum)
     }
 }
 
-int dhcp_server_init(struct dhcp_server_t *server, const char *lease_file,
-                     uint32_t timer_interval, bool enable_async_io)
+int dhcp_server_init(struct dhcp_server_t *server, const char *lease_file, uint32_t timer_interval, bool enable_async_io)
 {
     if (!server || !lease_file)
         return -1;

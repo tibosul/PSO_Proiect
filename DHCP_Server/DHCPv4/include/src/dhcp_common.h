@@ -53,19 +53,15 @@ struct dhcp_packet
     uint32_t xid;          /* Transaction ID, a random number chosen by the client */
     uint16_t secs;         /* Seconds elapsed since client began address acquisition or renewal process */
     uint16_t flags;        /* Flags */
-    struct in_addr ciaddr; /* Client IP address; only filled in if client is in
-                              BOUND, RENEW or REBINDING state */
+    struct in_addr ciaddr; /* Client IP address; only filled in if client is in BOUND, RENEW or REBINDING state */
     struct in_addr yiaddr; /* 'your' (client) IP address */
-    struct in_addr siaddr; /* IP address of next server to use in bootstrap;
-                              returned in DHCPOFFER, DHCPACK by server */
+    struct in_addr siaddr; /* IP address of next server to use in bootstrap; returned in DHCPOFFER, DHCPACK by server */
     struct in_addr giaddr; /* Relay agent IP address; used in booting via a relay agent */
     uint8_t chaddr[16];    /* Client hardware address */
     uint8_t sname[64];     /* Optional server host name, null terminated string */
-    uint8_t file[128];     /* Boot file name, null terminated string; "generic" name
-                              or null in DHCPDISCOVER, fully qualified directory-path
-                              name in DHCPOFFER */
-    uint8_t options[312];  /* Optional parameters field. reference to magic cookie
-                              is first 4 bytes */
+    uint8_t file[128];     /* Boot file name, null terminated string; "generic" name or null in DHCPDISCOVER,
+                              fully qualified directory-path name in DHCPOFFER */
+    uint8_t options[312];  /* Optional parameters field. reference to magic cookie is first 4 bytes */
 };
 
 #endif // DHCP_COMMON_H

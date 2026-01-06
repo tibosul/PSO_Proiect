@@ -13,12 +13,12 @@
 
 typedef enum
 {
-  IP_STATE_AVAILABLE = 0,
-  IP_STATE_ALLOCATED,
-  IP_STATE_RESERVED,
-  IP_STATE_EXCLUDED,
-  IP_STATE_CONFLICT,
-  IP_STATE_UNKNOWN
+    IP_STATE_AVAILABLE = 0,
+    IP_STATE_ALLOCATED,
+    IP_STATE_RESERVED,
+    IP_STATE_EXCLUDED,
+    IP_STATE_CONFLICT,
+    IP_STATE_UNKNOWN
 } ip_state_t;
 
 /**
@@ -37,29 +37,29 @@ const char *ip_state_to_string(ip_state_t state);
 
 struct ip_pool_entry_t
 {
-  struct in_addr ip_address;
-  ip_state_t state;
-  uint8_t mac_address[6];
-  time_t last_allocated;
-  uint64_t lease_id; // Lease ID reference (0 = no lease)
+    struct in_addr ip_address;
+    ip_state_t state;
+    uint8_t mac_address[6];
+    time_t last_allocated;
+    uint64_t lease_id; // Lease ID reference (0 = no lease)
 };
 
 struct ip_pool_t
 {
-  struct dhcp_subnet_t *subnet;
-  struct ip_pool_entry_t entries[MAX_POOL_SIZE];
-  uint32_t pool_size;
-  uint32_t allocated_count;
-  uint32_t available_count;
+    struct dhcp_subnet_t *subnet;
+    struct ip_pool_entry_t entries[MAX_POOL_SIZE];
+    uint32_t pool_size;
+    uint32_t allocated_count;
+    uint32_t available_count;
 
-  pthread_mutex_t mutex;
+    pthread_mutex_t mutex;
 };
 
 struct ip_allocation_result_t
 {
-  bool success;
-  struct in_addr ip_address;
-  char error_message[256];
+    bool success;
+    struct in_addr ip_address;
+    char error_message[256];
 };
 
 /**
@@ -145,13 +145,13 @@ struct ip_pool_entry_t *ip_pool_find_entry(struct ip_pool_t *pool, struct in_add
  * @return true if it is the network address, false otherwise.
  */
 
- /**
-  * @brief Check if an IP address is the broadcast address of the subnet.
-  * @param ip IP address to check.
-  * @param network Network address of the subnet.
-  * @param netmask Netmask of the subnet.
-  * @return true if it is the broadcast address, false otherwise.
-  */
+/**
+ * @brief Check if an IP address is the network address of the subnet.
+ * @param ip IP address to check.
+ * @param network Network address of the subnet.
+ * @param netmask Netmask of the subnet.
+ * @return true if it is the network address, false otherwise.
+ */
 bool ip_is_network_address(struct in_addr ip, struct in_addr network, struct in_addr netmask);
 
 /**

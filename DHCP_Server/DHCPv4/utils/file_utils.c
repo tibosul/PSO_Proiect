@@ -9,7 +9,7 @@ int advance_to_next_closed_brace(FILE *fp)
 
     int ch;
     int brace_count = 0;
-    
+
     while ((ch = fgetc(fp)) != EOF)
     {
         if (ch == '{')
