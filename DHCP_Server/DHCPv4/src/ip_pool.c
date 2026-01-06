@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <asm-generic/errno.h>
 #include <netinet/in.h>
 #include <stdint.h>

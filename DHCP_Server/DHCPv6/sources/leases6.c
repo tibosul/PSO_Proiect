@@ -308,7 +308,7 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
     if(str_to_in6(ip,&L->ip6_addr)!=0) return -1;
     in6_to_str(&L->ip6_addr,L->ip6_addr_str,sizeof(L->ip6_addr_str));
 
-    int seen_starts = 0, seen_ends = 0, seen_any = 0;
+    int seen_starts = 0, seen_ends = 0;
 
     char line[READ_BUF_SZ];
     while(1)
@@ -319,7 +319,7 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
         char* s = trim(line);
         if(!*s || *s == '#') continue;
         if(*s == '}'){
-            if (!seen_starts && !seen_ends) return -1;  
+            if (!seen_starts && !seen_ends) return -1;
             return 0;
         }
 
@@ -327,7 +327,7 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
             char val[128];
             if (sscanf(s, "starts %127[^;];", val) == 1) {
                 time_t t = parse_lease_time_any(trim(val));
-                if (t > 0) { L->starts = t; seen_starts = 1; seen_any = 1; }
+                if (t > 0) { L->starts = t; seen_starts = 1; }
             }
             continue;
         }
@@ -335,7 +335,7 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
              char val[128];
              if (sscanf(s, "ends %127[^;];", val) == 1) {
                  time_t t = parse_lease_time_any(trim(val));
-                 if (t > 0) { L->ends = t; seen_ends = 1; seen_any = 1; }
+                 if (t > 0) { L->ends = t; seen_ends = 1; }
              }
              continue;
         }
@@ -348,7 +348,6 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
                 int n = duid_hex_to_bin(hex,L->duid,DUID_MAX_LEN);
                 if(n<0) return -1;
                 L->duid_len=(uint16_t)n;
-                seen_any=1;
             }
         }
         if(!strncmp(s,"iaid",4))
@@ -393,7 +392,7 @@ static int parse_block_ia_pd(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
 
     in6_to_str(&L->ip6_addr,L->ip6_addr_str,sizeof(L->ip6_addr_str));
 
-    int seen_starts = 0, seen_ends = 0, seen_any = 0;
+    int seen_starts = 0, seen_ends = 0;
     char line[READ_BUF_SZ];
     while(1)
     {
@@ -402,7 +401,7 @@ static int parse_block_ia_pd(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
         char* s=trim(line);
         if(!*s || *s=='#') continue;
         if(*s == '}'){
-            if (!seen_starts && !seen_ends) return -1;  
+            if (!seen_starts && !seen_ends) return -1;
             return 0;
         }
 
@@ -410,7 +409,7 @@ static int parse_block_ia_pd(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
             char val[128];
             if (sscanf(s, "starts %127[^;];", val) == 1) {
                 time_t t = parse_lease_time_any(trim(val));
-                if (t > 0) { L->starts = t; seen_starts = 1; seen_any = 1; }
+                if (t > 0) { L->starts = t; seen_starts = 1; }
             }
             continue;
         }
@@ -418,7 +417,7 @@ static int parse_block_ia_pd(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
              char val[128];
              if (sscanf(s, "ends %127[^;];", val) == 1) {
                  time_t t = parse_lease_time_any(trim(val));
-                 if (t > 0) { L->ends = t; seen_ends = 1; seen_any = 1; }
+                 if (t > 0) { L->ends = t; seen_ends = 1; }
              }
              continue;
         }
@@ -432,7 +431,6 @@ static int parse_block_ia_pd(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
                 if(n<0)
                     return -1;
                 L->duid_len=(uint16_t)n;
-                seen_any=1;
             }
         }
         if(!strncmp(s,"iaid",4))
@@ -519,7 +517,7 @@ int lease_v6_db_save(lease_v6_db_t* db)
 {
     if(!db) return -1;
 
-    char tmp_path[LEASE6_PATH_MAX];
+    char tmp_path[LEASE6_PATH_MAX + 8];
     snprintf(tmp_path,sizeof(tmp_path),"%s.tmp",db->filename);
 
     int fd=open(tmp_path,O_WRONLY|O_CREAT|O_TRUNC,0644);
@@ -652,7 +650,6 @@ int lease_v6_db_append(lease_v6_db_t* db, const dhcpv6_lease_t* L){
      if (L->tstp) { format_lease_time(L->tstp, tbuf, sizeof(tbuf)); write_fmt(fd, "\ttstp %s;\n", tbuf); }
      if (L->cltt) { format_lease_time(L->cltt, tbuf, sizeof(tbuf)); write_fmt(fd, "\tcltt %s;\n", tbuf); }
  
-     const char* st[] = {"free","active","expired","released","declined","abandoned","backup"};
      write_fmt(fd, "\tbinding state %s;\n", lease_v6_state_to_string(L->state));
      if (L->next_state)   write_fmt(fd, "\tnext binding state %s;\n",   lease_v6_state_to_string(L->next_state));
      if (L->rewind_state) write_fmt(fd, "\trewind binding state %s;\n", lease_v6_state_to_string(L->rewind_state));
@@ -673,6 +670,7 @@ dhcpv6_lease_t* lease_v6_add_ia_na(lease_v6_db_t* db,
                                    uint32_t lease_secs,
                                    const char* hostname_opt)
 {
+   (void)duid_len;
    if (!db || !duid_hex || !ip) return NULL;
 
    if (db->count >= LEASES6_MAX) {
@@ -716,6 +714,7 @@ dhcpv6_lease_t* lease_v6_add_ia_pd(lease_v6_db_t* db,
                                    uint32_t lease_secs,
                                    const char* hostname_opt)
 {
+    (void)duid_len;
     if (!db || db->count>=LEASES6_MAX || !prefix_base) return NULL;
 
     if (db->count >= LEASES6_MAX) {
@@ -856,7 +855,6 @@ int lease_v6_cleanup(lease_v6_db_t* db){
 void lease_v6_db_print(const lease_v6_db_t* db){
     if (!db) return;
     printf("--- DHCPv6 Lease DB ---\nFile: %s\nTotal: %u\n\n", db->filename, db->count);
-    char duid_hex[3*DUID_MAX_LEN];
      for (uint32_t i=0;i<db->count;i++){
          const dhcpv6_lease_t *L = &db->leases[i];
          char a[INET6_ADDRSTRLEN], sb[64], eb[64];

@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>

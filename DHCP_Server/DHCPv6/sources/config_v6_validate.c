@@ -21,14 +21,6 @@ static int ip6_compare(const struct in6_addr *a, const struct in6_addr *b)
     return memcmp(a->s6_addr, b->s6_addr, 16);
 }
 
-/* Check if addr is within [start, end] inclusive. */
-static bool ipv6_between(const struct in6_addr *addr,
-                         const struct in6_addr *start,
-                         const struct in6_addr *end)
-{
-    return (ip6_compare(start, addr) <= 0 && ip6_compare(addr, end) <= 0);
-}
-
 static void validate_range6(const dhcpv6_subnet_t *s)
 {
     if (!s->has_pool_range) return;

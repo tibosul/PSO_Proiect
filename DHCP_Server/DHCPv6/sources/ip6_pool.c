@@ -207,7 +207,7 @@ int ip6_pool_init(struct ip6_pool_t* pool, dhcpv6_subnet_t* subnet, lease_v6_db_
     struct in6_addr cur = subnet->pool_start_bin;
     struct in6_addr end = subnet->pool_end_bin;
 
-    char s_start[INET6_ADDRSTRLEN], s_end[INET6_ADDRSTRLEN], s_cur[INET6_ADDRSTRLEN];
+    char s_start[INET6_ADDRSTRLEN], s_end[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET6, &cur, s_start, sizeof(s_start));
     inet_ntop(AF_INET6, &end, s_end, sizeof(s_end));
     int iterations = 0;
