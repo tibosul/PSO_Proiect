@@ -1,0 +1,10 @@
+# Build artifacts
+bin/
+build/
+*.o
+*.so
+*.a
+
+# Executables
+dhcpv4_client
+dhcpv6_client
