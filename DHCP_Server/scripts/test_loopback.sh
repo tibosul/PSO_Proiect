@@ -53,7 +53,7 @@ CLIENT_BIN="./build/bin/dhcpv4_client"
 LOG_DIR="logs"
 TEST_DURATION=30  # seconds to run test
 SERVER_PID=""     # Will be set when server starts
-CLIENT_PIDS_FILE="/tmp/dhcp_test_clients_$$.pids"  # Process-specific temp file
+CLIENT_PIDS_FILE=$(mktemp /tmp/dhcp_test_clients.XXXXXX.pids)  # Secure temp file
 
 echo -e "${BLUE}=============================================${NC}"
 echo -e "${BLUE}  DHCP Loopback Functionality Test${NC}"

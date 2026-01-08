@@ -16,9 +16,12 @@
 #     sudo ./test_network.sh client <interface> <server_ip>
 #
 
-# Note: We use 'set -e' for early failure detection. 
-# This script is a helper that execs into server/client binaries,
-# so cleanup is handled by the executed process.
+# Note: We use 'set -e' for early failure detection during argument validation.
+# This is a thin wrapper that execs into server/client binaries after validation.
+# No cleanup trap is needed because:
+# 1. We don't start any background processes
+# 2. The exec replaces this process with the server/client
+# 3. The server/client handle their own signal handling
 set -e
 
 cd "$(dirname "$0")/.."

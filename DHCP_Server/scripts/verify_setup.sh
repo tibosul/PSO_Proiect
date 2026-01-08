@@ -172,8 +172,8 @@ section "5. Network Interfaces"
 # Check for loopback
 if ip link show lo &>/dev/null; then
     pass "Loopback interface (lo) available"
-    # Check if loopback is UP (look for UP flag in angle brackets)
-    if ip link show lo | grep -q '<.*UP.*>'; then
+    # Check if loopback is UP (look for UP flag within angle brackets)
+    if ip link show lo | grep -qE '<[^>]*\bUP\b[^>]*>'; then
         pass "Loopback interface is UP"
     else
         fail "Loopback interface is DOWN"
