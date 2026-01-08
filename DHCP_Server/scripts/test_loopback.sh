@@ -53,7 +53,7 @@ CLIENT_BIN="./build/bin/dhcpv4_client"
 LOG_DIR="logs"
 TEST_DURATION=30  # seconds to run test
 SERVER_PID=""     # Will be set when server starts
-CLIENT_PIDS_FILE=$(mktemp /tmp/dhcp_test_clients.XXXXXX.pids)  # Secure temp file
+CLIENT_PIDS_FILE=$(mktemp)  # Secure temp file in system temp directory
 
 echo -e "${BLUE}=============================================${NC}"
 echo -e "${BLUE}  DHCP Loopback Functionality Test${NC}"
@@ -128,9 +128,6 @@ start_client() {
     fi
     echo ""
 }
-
-# Clear client PIDs file (already initialized at top)
-rm -f "$CLIENT_PIDS_FILE"
 
 # Start multiple clients to test concurrent operation
 echo -e "${BLUE}Testing Multiple Clients:${NC}"

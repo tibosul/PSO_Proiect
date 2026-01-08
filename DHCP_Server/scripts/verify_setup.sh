@@ -220,7 +220,8 @@ done
 
 # Check firewall (if applicable)
 if command -v ufw &>/dev/null; then
-    UFW_STATUS=$(sudo ufw status 2>/dev/null | head -1)
+    # Try to get firewall status - if sudo fails, skip gracefully
+    UFW_STATUS=$(sudo -n ufw status 2>/dev/null | head -1 || echo "Unable to check (need sudo)")
     info "UFW firewall: $UFW_STATUS"
     if echo "$UFW_STATUS" | grep -iq "active"; then
         warn "Firewall is active - ensure ports 67/68 UDP are allowed"
