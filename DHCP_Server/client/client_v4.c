@@ -265,7 +265,9 @@ int main(int argc, char** argv)
     // --- Argument Parsing ---
     char* ifname = NULL;
     char* server_ip = NULL;
+    char* custom_mac = NULL;
     int server_port = DHCP_SERVER_PORT;
+    int client_port = DHCP_CLIENT_PORT;
 
     for (int i = 1; i < argc; i++)
     {
@@ -277,6 +279,14 @@ int main(int argc, char** argv)
         {
             server_port = atoi(argv[++i]);
         }
+        else if (strcmp(argv[i], "-m") == 0 && i + 1 < argc)
+        {
+            custom_mac = argv[++i];
+        }
+        else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc)
+        {
+            client_port = atoi(argv[++i]);
+        }
         else if (ifname == NULL)
         {
             ifname = argv[i];
@@ -285,9 +295,11 @@ int main(int argc, char** argv)
 
     if (ifname == NULL)
     {
-        log_error("Usage: %s <interface> [-s server_ip] [-p port]", argv[0]);
+        log_error("Usage: %s <interface> [-s server_ip] [-p port] [-m mac] [-c client_port]", argv[0]);
         log_error("  -s : Server IP (unicast instead of broadcast)");
         log_error("  -p : Server port (default: 67)");
+        log_error("  -m : Custom MAC address (e.g., aa:bb:cc:dd:ee:ff)");
+        log_error("  -c : Client port (default: 68, for multiple clients use different ports)");
         close_logger();
         return 1;
     }
@@ -302,7 +314,18 @@ int main(int argc, char** argv)
     }
 
     uint8_t mac[6];
-    if (get_mac_address_v4(ifname, mac) != 0)
+    if (custom_mac != NULL)
+    {
+        // Parse custom MAC address
+        if (sscanf(custom_mac, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]) != 6)
+        {
+            log_error("Invalid MAC format. Use: aa:bb:cc:dd:ee:ff");
+            close_logger();
+            return 1;
+        }
+    }
+    else if (get_mac_address_v4(ifname, mac) != 0)
     {
         log_error("Error getting MAC address: %s", strerror(errno));
         close_logger();
@@ -334,21 +357,33 @@ int main(int argc, char** argv)
     struct sockaddr_in client_addr;
     memset(&client_addr, 0, sizeof(client_addr));
     client_addr.sin_family = AF_INET;
-    client_addr.sin_port = htons(DHCP_CLIENT_PORT);
+    client_addr.sin_port = htons(client_port);
     client_addr.sin_addr.s_addr = INADDR_ANY;
-    
+
     int reuse = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
     {
         perror("setsockopt SO_REUSEADDR");
     }
-    
+
     if (bind(sock, (struct sockaddr*)&client_addr, sizeof(client_addr)) < 0)
     {
-        perror("bind failed");
-        close(sock);
-        return 1;
+        log_warn("Failed to bind port %d: %s (needs root/CAP_NET_BIND_SERVICE)",
+                 client_port, strerror(errno));
+        // Fallback: use non-privileged port (6800 + original port offset)
+        int fallback_port = 6800 + (client_port % 100);
+        log_info("Trying to bind to non-privileged port %d for testing...", fallback_port);
+        client_addr.sin_port = htons(fallback_port);
+        if (bind(sock, (struct sockaddr*)&client_addr, sizeof(client_addr)) < 0)
+        {
+            log_error("Failed to bind fallback port %d: %s", fallback_port, strerror(errno));
+            close(sock);
+            close_logger();
+            return 1;
+        }
+        client_port = fallback_port;
     }
+    log_info("Client bound to port %d", client_port);
     
     // Destination: Broadcast or unicast to server
     struct sockaddr_in dest_addr;
@@ -442,7 +477,7 @@ int main(int argc, char** argv)
                     offered_ip = rx_packet.yiaddr;
                     get_dhcp_requested_ip(&rx_packet, &server_id);
 
-                    log_info("[SELECTING] Received DHCPOFFER: IP=%s", inet_ntoa(offered_ip));
+                    log_info("<<< OFFER RECEIVED: Server offers IP %s", inet_ntoa(offered_ip));
 
                     // Send REQUEST
                     log_info("[SELECTING] Sending DHCPREQUEST...");
@@ -493,8 +528,7 @@ int main(int argc, char** argv)
                 {
                     assigned_ip = rx_packet.yiaddr;
 
-                    log_info("[REQUESTING] Received DHCPACK: IP=%s",
-                           inet_ntoa(assigned_ip));
+                    log_info("<<< ACK RECEIVED: Got IP %s from server", inet_ntoa(assigned_ip));
 
                     // Configure the interface with the assigned IP
                     char cmd[256];
@@ -504,11 +538,11 @@ int main(int argc, char** argv)
 
                     if (system(cmd) == 0)
                     {
-                        log_info("IP assigned successfully.");
+                        log_info("*** SUCCESS: Interface %s now has IP %s ***", ifname, inet_ntoa(assigned_ip));
                     }
                     else
                     {
-                        log_error("Failed to assign IP.");
+                        log_warn("Could not configure interface (needs root). IP %s was assigned by server.", inet_ntoa(assigned_ip));
                     }
 
                     state = STATE_V4_BOUND;

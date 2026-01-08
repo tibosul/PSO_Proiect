@@ -77,8 +77,13 @@ void packet_processor(void *arg)
     // Find correct subnet/pool if multiple exist
     // Implementation omitted for brevity - would check if giaddr matches a subnet
 
-    log_info("Processing DHCP message type %d from %s", msg_type,
-           inet_ntoa(dest.sin_addr));
+    log_info("Processing DHCP %s from %s (MAC: %02x:%02x:%02x:%02x:%02x:%02x)",
+           msg_type == DHCP_DISCOVER ? "DISCOVER" :
+           msg_type == DHCP_REQUEST ? "REQUEST" :
+           msg_type == DHCP_RELEASE ? "RELEASE" : "UNKNOWN",
+           inet_ntoa(dest.sin_addr),
+           req->chaddr[0], req->chaddr[1], req->chaddr[2],
+           req->chaddr[3], req->chaddr[4], req->chaddr[5]);
 
     switch (msg_type)
     {
@@ -106,18 +111,31 @@ void packet_processor(void *arg)
             dhcp_message_make_offer(&res, req, lease, subnet,
                                     &g_server.config.global);
             // Send OFFER
-            dest.sin_port = htons(DHCP_CLIENT_PORT);
             if (req->giaddr.s_addr != 0)
+            {
+                dest.sin_port = htons(DHCP_CLIENT_PORT);
                 dest.sin_addr = req->giaddr; // Unicast to relay
+            }
             else if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
-                ; // Loopback - keep original client address for unicast reply
+            {
+                // Loopback - keep original client address AND port for unicast reply
+                dest.sin_port = task->client_addr.sin_port;
+            }
             else
+            {
+                dest.sin_port = htons(DHCP_CLIENT_PORT);
                 dest.sin_addr.s_addr = INADDR_BROADCAST; // Broadcast
+            }
 
             sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                    sizeof(dest));
-            log_info("Sent DHCPOFFER for IP %s to %s", inet_ntoa(lease->ip_address),
-                     inet_ntoa(dest.sin_addr));
+            char ip_buf[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &lease->ip_address, ip_buf, sizeof(ip_buf));
+            log_info(">>> OFFER: Allocated IP %s to client (lease %us)", ip_buf, subnet->default_lease_time);
+        }
+        else
+        {
+            log_warn(">>> OFFER FAILED: No IP available for client");
         }
         break;
     }
@@ -149,29 +167,43 @@ void packet_processor(void *arg)
                 dhcp_message_make_ack(&res, req, lease, subnet,
                                       &g_server.config.global);
 
-                dest.sin_port = htons(DHCP_CLIENT_PORT);
                 if (req->giaddr.s_addr != 0)
+                {
+                    dest.sin_port = htons(DHCP_CLIENT_PORT);
                     dest.sin_addr = req->giaddr;
+                }
                 else if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
-                    ; // Loopback - keep original client address
+                {
+                    // Loopback - keep original client address AND port
+                    dest.sin_port = task->client_addr.sin_port;
+                }
                 else
+                {
+                    dest.sin_port = htons(DHCP_CLIENT_PORT);
                     dest.sin_addr.s_addr = INADDR_BROADCAST;
+                }
 
                 sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                        sizeof(dest));
-                log_info("Sent DHCPACK for IP %s to %s", inet_ntoa(lease->ip_address),
-                         inet_ntoa(dest.sin_addr));
+                char ack_ip_buf[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &lease->ip_address, ack_ip_buf, sizeof(ack_ip_buf));
+                log_info(">>> ACK: Confirmed IP %s to client", ack_ip_buf);
             }
             else
             {
                 // Send NAK
                 dhcp_message_make_nak(&res, req,
                                       subnet->router); // Use router IP as server ID
-                dest.sin_port = htons(DHCP_CLIENT_PORT);
                 if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
-                    ; // Loopback - keep original client address
+                {
+                    // Loopback - keep original client address AND port
+                    dest.sin_port = task->client_addr.sin_port;
+                }
                 else
+                {
+                    dest.sin_port = htons(DHCP_CLIENT_PORT);
                     dest.sin_addr.s_addr = INADDR_BROADCAST;
+                }
                 sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                        sizeof(dest));
                 log_info("Sent DHCPNAK for IP %s", inet_ntoa(req_ip));
@@ -188,10 +220,16 @@ void packet_processor(void *arg)
                 dhcp_message_make_ack(&res, req, lease, subnet,
                                       &g_server.config.global);
 
-                dest.sin_port = htons(DHCP_CLIENT_PORT);
+                // For loopback testing, keep original port; otherwise use standard port
+                if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
+                    dest.sin_port = task->client_addr.sin_port;
+                else
+                    dest.sin_port = htons(DHCP_CLIENT_PORT);
                 dest.sin_addr = req->ciaddr; // Unicast to client
                 sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
                        sizeof(dest));
+                log_info("Sent DHCPACK (renewal) for IP %s to %s:%d", inet_ntoa(lease->ip_address),
+                         inet_ntoa(dest.sin_addr), ntohs(dest.sin_port));
             }
         }
         break;

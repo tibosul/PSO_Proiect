@@ -3,14 +3,16 @@ cd "$(dirname "$0")/.."
 mkdir -p logs
 
 show_usage() {
-    echo "Usage: $0 <interface> [-s server_ip] [-p port]"
+    echo "Usage: $0 <interface> [-s server_ip] [-p port] [-m mac] [-c client_port]"
     echo "  -s : Server IP (unicast instead of broadcast)"
     echo "  -p : Server port (default: 67)"
+    echo "  -m : Custom MAC address (e.g., aa:bb:cc:dd:ee:ff)"
+    echo "  -c : Client port (default: 68, use different for multiple clients)"
     echo ""
     echo "Examples:"
-    echo "  $0 eth0                    # Normal broadcast mode"
-    echo "  $0 lo -s 127.0.0.1         # Loopback testing with unicast"
-    echo "  $0 lo -s 127.0.0.1 -p 6767 # Testing with fallback port"
+    echo "  $0 eth0                           # Normal broadcast mode"
+    echo "  $0 lo -s 127.0.0.1                # Loopback testing with unicast"
+    echo "  $0 lo -s 127.0.0.1 -m aa:bb:cc:dd:ee:01 -c 69  # Multi-client test"
 }
 
 IF="${1:-}"
