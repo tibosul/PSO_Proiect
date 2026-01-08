@@ -5,8 +5,10 @@ build/
 logs/
 *.log
 
-# Tests
-*test*
+# Tests (exclude test data files, but keep test scripts)
+*test*.leases
+test_output/
+test_results/
 
 # Data files
 DHCPv4/data/
