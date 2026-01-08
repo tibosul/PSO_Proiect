@@ -16,6 +16,9 @@
 #     sudo ./test_network.sh client <interface> <server_ip>
 #
 
+# Note: We use 'set -e' for early failure detection. 
+# This script is a helper that execs into server/client binaries,
+# so cleanup is handled by the executed process.
 set -e
 
 cd "$(dirname "$0")/.."

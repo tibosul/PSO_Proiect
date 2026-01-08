@@ -10,7 +10,33 @@
 # - Lease management works correctly
 #
 
-set -e  # Exit on error
+# Note: We use 'set -e' for early failure detection during setup phase.
+# Critical cleanup operations use '|| true' to ensure they run even if set -e is active.
+set -e
+
+# Set up cleanup trap to ensure processes are killed even on script failure
+cleanup() {
+    echo ""
+    echo -e "${YELLOW}Cleaning up...${NC}"
+    
+    # Kill clients
+    if [ -f "$CLIENT_PIDS_FILE" ]; then
+        while read pid; do
+            if kill -0 $pid 2>/dev/null; then
+                sudo kill $pid 2>/dev/null || true
+            fi
+        done < "$CLIENT_PIDS_FILE" 2>/dev/null || true
+        rm -f "$CLIENT_PIDS_FILE" || true
+    fi
+    
+    # Kill server
+    if [ -n "$SERVER_PID" ] && kill -0 $SERVER_PID 2>/dev/null; then
+        sudo kill $SERVER_PID 2>/dev/null || true
+        wait $SERVER_PID 2>/dev/null || true
+    fi
+}
+
+trap cleanup EXIT INT TERM
 
 cd "$(dirname "$0")/.."
 
@@ -26,6 +52,8 @@ SERVER_BIN="./build/bin/dhcpv4_server"
 CLIENT_BIN="./build/bin/dhcpv4_client"
 LOG_DIR="logs"
 TEST_DURATION=30  # seconds to run test
+SERVER_PID=""     # Will be set when server starts
+CLIENT_PIDS_FILE="/tmp/dhcp_test_clients_$$.pids"  # Process-specific temp file
 
 echo -e "${BLUE}=============================================${NC}"
 echo -e "${BLUE}  DHCP Loopback Functionality Test${NC}"
@@ -87,7 +115,7 @@ start_client() {
     
     local CLIENT_PID=$!
     echo "  Client $CLIENT_NUM PID: $CLIENT_PID"
-    echo "$CLIENT_PID" >> /tmp/dhcp_test_clients.pids
+    echo "$CLIENT_PID" >> "$CLIENT_PIDS_FILE"
     
     # Give client time to complete DHCP handshake
     sleep 2
@@ -101,8 +129,8 @@ start_client() {
     echo ""
 }
 
-# Clear client PIDs file
-rm -f /tmp/dhcp_test_clients.pids
+# Clear client PIDs file (already initialized at top)
+rm -f "$CLIENT_PIDS_FILE"
 
 # Start multiple clients to test concurrent operation
 echo -e "${BLUE}Testing Multiple Clients:${NC}"
@@ -182,27 +210,7 @@ else
 fi
 echo ""
 
-# Cleanup
-echo -e "${YELLOW}Cleaning up...${NC}"
-
-# Kill clients
-if [ -f /tmp/dhcp_test_clients.pids ]; then
-    while read pid; do
-        if kill -0 $pid 2>/dev/null; then
-            sudo kill $pid 2>/dev/null || true
-        fi
-    done < /tmp/dhcp_test_clients.pids
-    rm -f /tmp/dhcp_test_clients.pids
-fi
-
-# Kill server
-if kill -0 $SERVER_PID 2>/dev/null; then
-    sudo kill $SERVER_PID
-    wait $SERVER_PID 2>/dev/null || true
-fi
-
-echo -e "${GREEN}✓ Cleanup complete${NC}"
-echo ""
+# Cleanup is now handled by the trap function
 
 echo -e "${BLUE}=============================================${NC}"
 echo -e "${BLUE}  Test Complete${NC}"

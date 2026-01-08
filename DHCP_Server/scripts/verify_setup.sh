@@ -172,8 +172,8 @@ section "5. Network Interfaces"
 # Check for loopback
 if ip link show lo &>/dev/null; then
     pass "Loopback interface (lo) available"
-    # Check if loopback is UP (either "state UP" or "state UNKNOWN" with UP flag)
-    if ip link show lo | grep -q "UP"; then
+    # Check if loopback is UP (look for UP flag in angle brackets)
+    if ip link show lo | grep -q '<.*UP.*>'; then
         pass "Loopback interface is UP"
     else
         fail "Loopback interface is DOWN"
@@ -230,23 +230,26 @@ fi
 # =============================================================================
 # Check 7: Port Availability
 # =============================================================================
+# Function to check port usage
+check_port_usage() {
+    local port=$1
+    local name=$2
+    
+    if ss -ulnp 2>/dev/null | grep -q ":${port} " || netstat -ulnp 2>/dev/null | grep -q ":${port} "; then
+        warn "Port ${port} (${name}) is already in use"
+        if [ "$port" = "67" ]; then
+            info "You may need to stop existing DHCP servers"
+        fi
+    else
+        pass "Port ${port} (${name}) is available"
+    fi
+}
+
 section "7. Port Availability"
 
 if command -v netstat &>/dev/null || command -v ss &>/dev/null; then
-    # Check if port 67 is in use
-    if ss -ulnp 2>/dev/null | grep -q ":67 " || netstat -ulnp 2>/dev/null | grep -q ":67 "; then
-        warn "Port 67 (DHCP server) is already in use"
-        info "You may need to stop existing DHCP servers"
-    else
-        pass "Port 67 (DHCP server) is available"
-    fi
-    
-    # Check if port 68 is in use
-    if ss -ulnp 2>/dev/null | grep -q ":68 " || netstat -ulnp 2>/dev/null | grep -q ":68 "; then
-        warn "Port 68 (DHCP client) is already in use"
-    else
-        pass "Port 68 (DHCP client) is available"
-    fi
+    check_port_usage 67 "DHCP server"
+    check_port_usage 68 "DHCP client"
 else
     warn "netstat/ss not available, cannot check port usage"
 fi
