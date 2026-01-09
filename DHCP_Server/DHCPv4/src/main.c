@@ -27,7 +27,7 @@ static volatile int g_running = 1;
 struct server_context_t
 {
     int sockfd;
-    struct lease_database_t lease_db;
+    struct dhcp_server_t dhcp;  // Unified lease management (db + timer + I/O queue)
     struct dhcp_config_t config;
     struct ip_pool_t pools[MAX_SUBNETS];
     struct ip_pool_sync_t pool_syncs[MAX_SUBNETS];
@@ -92,7 +92,7 @@ void packet_processor(void *arg)
     {
         struct dhcp_lease_t *lease = NULL;
         // 1. Try to find existing lease for MAC
-        lease = lease_db_find_by_mac(&g_server.lease_db, req->chaddr);
+        lease = lease_db_find_by_mac(g_server.dhcp.lease_db, req->chaddr);
 
         // 2. Or allocate new IP
         if (!lease)
@@ -103,14 +103,13 @@ void packet_processor(void *arg)
                 memcpy(&req_ip.s_addr, req_ip_opt, 4);
 
             lease = ip_pool_allocate_and_create_lease(
-                pool, &g_server.lease_db, req->chaddr, req_ip, &g_server.config,
+                pool, g_server.dhcp.lease_db, req->chaddr, req_ip, &g_server.config,
                 subnet->default_lease_time);
         }
 
         if (lease)
         {
-            dhcp_message_make_offer(&res, req, lease, subnet,
-                                    &g_server.config.global);
+            dhcp_message_make_offer(&res, req, lease, subnet, &g_server.config.global);
             // Send OFFER
             if (req->giaddr.s_addr != 0)
             {
@@ -128,9 +127,8 @@ void packet_processor(void *arg)
                 dest.sin_addr.s_addr = INADDR_BROADCAST; // Broadcast
             }
 
-            sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
-                   sizeof(dest));
-            char ip_buf[INET_ADDRSTRLEN];
+            sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest, sizeof(dest));
+            char ip_buf[INET_ADDRSTRLEN];   
             inet_ntop(AF_INET, &lease->ip_address, ip_buf, sizeof(ip_buf));
             log_info(">>> OFFER: Allocated IP %s to client (lease %us)", ip_buf, subnet->default_lease_time);
         }
@@ -158,22 +156,27 @@ void packet_processor(void *arg)
         {
             // Verify we are the server
             // (skip check for now or match against our IP)
+            /*
+            if (server_id.s_addr != 0 && server_id != our_server_ip)
+            {
+                log_warn("DHCPREQUEST SERVER ID does not match this server");
+                break;
+            }
+            */
 
-            lease = lease_db_find_by_ip(&g_server.lease_db, req_ip);
+            lease = lease_db_find_by_ip(g_server.dhcp.lease_db, req_ip);
             if (lease && memcmp(lease->mac_address, req->chaddr, 6) == 0)
             {
                 // Confirm lease
-                lease_db_renew_lease(&g_server.lease_db, lease->ip_address,
-                                     subnet->default_lease_time);
-                dhcp_message_make_ack(&res, req, lease, subnet,
-                                      &g_server.config.global);
+                lease_db_renew_lease(g_server.dhcp.lease_db, lease->ip_address, subnet->default_lease_time);
+                dhcp_message_make_ack(&res, req, lease, subnet, &g_server.config.global);
 
                 if (req->giaddr.s_addr != 0)
                 {
                     dest.sin_port = htons(DHCP_CLIENT_PORT);
                     dest.sin_addr = req->giaddr;
                 }
-                else if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
+                else if (ip_is_loopback(task->client_addr.sin_addr))
                 {
                     // Loopback - keep original client address AND port
                     dest.sin_port = task->client_addr.sin_port;
@@ -184,8 +187,7 @@ void packet_processor(void *arg)
                     dest.sin_addr.s_addr = INADDR_BROADCAST;
                 }
 
-                sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
-                       sizeof(dest));
+                sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest, sizeof(dest));
                 char ack_ip_buf[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &lease->ip_address, ack_ip_buf, sizeof(ack_ip_buf));
                 log_info(">>> ACK: Confirmed IP %s to client", ack_ip_buf);
@@ -193,9 +195,8 @@ void packet_processor(void *arg)
             else
             {
                 // Send NAK
-                dhcp_message_make_nak(&res, req,
-                                      subnet->router); // Use router IP as server ID
-                if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
+                dhcp_message_make_nak(&res, req, subnet->router); // Use router IP as server ID
+                if (ip_is_loopback(task->client_addr.sin_addr))
                 {
                     // Loopback - keep original client address AND port
                     dest.sin_port = task->client_addr.sin_port;
@@ -205,30 +206,26 @@ void packet_processor(void *arg)
                     dest.sin_port = htons(DHCP_CLIENT_PORT);
                     dest.sin_addr.s_addr = INADDR_BROADCAST;
                 }
-                sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
-                       sizeof(dest));
+                sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest, sizeof(dest));
                 log_info("Sent DHCPNAK for IP %s", inet_ntoa(req_ip));
             }
         }
         // Renewing / Rebinding (Request IP but no Server ID)
         else if (req->ciaddr.s_addr != 0)
         {
-            lease = lease_db_find_by_ip(&g_server.lease_db, req->ciaddr);
+            lease = lease_db_find_by_ip(g_server.dhcp.lease_db, req->ciaddr);
             if (lease)
             {
-                lease_db_renew_lease(&g_server.lease_db, lease->ip_address,
-                                     subnet->default_lease_time);
-                dhcp_message_make_ack(&res, req, lease, subnet,
-                                      &g_server.config.global);
+                lease_db_renew_lease(g_server.dhcp.lease_db, lease->ip_address, subnet->default_lease_time);
+                dhcp_message_make_ack(&res, req, lease, subnet, &g_server.config.global);
 
                 // For loopback testing, keep original port; otherwise use standard port
-                if ((ntohl(task->client_addr.sin_addr.s_addr) & 0xFF000000) == 0x7F000000)
+                if (ip_is_loopback(task->client_addr.sin_addr))
                     dest.sin_port = task->client_addr.sin_port;
                 else
                     dest.sin_port = htons(DHCP_CLIENT_PORT);
                 dest.sin_addr = req->ciaddr; // Unicast to client
-                sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest,
-                       sizeof(dest));
+                sendto(g_server.sockfd, &res, sizeof(res), 0, (struct sockaddr *)&dest, sizeof(dest));
                 log_info("Sent DHCPACK (renewal) for IP %s to %s:%d", inet_ntoa(lease->ip_address),
                          inet_ntoa(dest.sin_addr), ntohs(dest.sin_port));
             }
@@ -239,7 +236,7 @@ void packet_processor(void *arg)
     case DHCP_RELEASE:
         if (req->ciaddr.s_addr != 0)
         {
-            lease_db_release_lease(&g_server.lease_db, req->ciaddr);
+            lease_db_release_lease(g_server.dhcp.lease_db, req->ciaddr);
             ip_pool_release_ip(pool, req->ciaddr);
             log_info("Released IP %s", inet_ntoa(req->ciaddr));
         }
@@ -277,34 +274,40 @@ int main(int argc, char *argv[])
     }
     print_config(&g_server.config);
 
-    // 3. Initialize Lease DB
-    if (lease_db_init(&g_server.lease_db, LEASE_DB_FILE) != 0)
+    // 3. Initialize DHCP server (lease DB + timer + I/O queue)
+    // Timer interval: 60 seconds, async I/O: enabled
+    if (dhcp_server_init(&g_server.dhcp, LEASE_DB_FILE, 60, true) != 0)
     {
-        log_error("Failed to initialize lease database");
+        log_error("Failed to initialize DHCP server");
         close_logger();
         return 1;
     }
-    lease_db_load(&g_server.lease_db);
 
     // 4. Initialize IP Pools for each subnet
     g_server.pool_count = g_server.config.subnet_count;
     for (int i = 0; i < g_server.pool_count; i++)
     {
-        ip_pool_init(&g_server.pools[i], &g_server.config.subnets[i],
-                     &g_server.lease_db);
+        ip_pool_init(&g_server.pools[i], &g_server.config.subnets[i], g_server.dhcp.lease_db);
     }
 
     // 5. Initialize and start IP Pool sync threads (sync every 30 seconds)
     for (int i = 0; i < g_server.pool_count; i++)
     {
-        if (ip_pool_sync_init(&g_server.pool_syncs[i], &g_server.pools[i],
-                              &g_server.lease_db, 30) == 0)
+        if (ip_pool_sync_init(&g_server.pool_syncs[i], &g_server.pools[i], g_server.dhcp.lease_db, 30) == 0)
         {
             ip_pool_sync_start(&g_server.pool_syncs[i]);
         }
     }
 
-    // 6. Initialize Worker Thread Pool
+    // 6. Start DHCP server (timer thread + I/O queue thread)
+    if (dhcp_server_start(&g_server.dhcp) != 0)
+    {
+        log_error("Failed to start DHCP server threads");
+        close_logger();
+        return 1;
+    }
+
+    // 7. Initialize Worker Thread Pool
     struct thread_pool_t *tpool = thread_pool_create(4, 1024);
     if (!tpool)
     {
@@ -314,7 +317,7 @@ int main(int argc, char *argv[])
     }
     log_info("Thread pool initialized with 4 workers");
 
-    // 7. Bind Socket
+    // 8. Bind Socket
     if ((g_server.sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
         perror("socket");
@@ -350,7 +353,7 @@ int main(int argc, char *argv[])
     }
     log_info("Server listening on port %d...", ntohs(server_addr.sin_port));
 
-    // 8. Main Loop
+    // 9. Main Loop
     while (g_running)
     {
         struct packet_task_t *task = malloc(sizeof(struct packet_task_t));
@@ -381,7 +384,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    // 9. Cleanup
+    // 10. Cleanup
     log_info("Shutting down...");
     thread_pool_destroy(tpool, 0);
     close(g_server.sockfd);
@@ -392,11 +395,14 @@ int main(int argc, char *argv[])
         ip_pool_sync_stop(&g_server.pool_syncs[i]);
     }
 
+    // Free IP pools
     for (int i = 0; i < g_server.pool_count; i++)
     {
         ip_pool_free(&g_server.pools[i]);
     }
-    lease_db_free(&g_server.lease_db);
+
+    // Stop DHCP server (stops timer, I/O queue, saves & frees lease DB)
+    dhcp_server_stop(&g_server.dhcp);
 
     log_info("Server stopped.");
     close_logger();
