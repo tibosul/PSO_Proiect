@@ -5,6 +5,7 @@
 #include <time.h>
 #include <stdbool.h>
 #include <netinet/in.h>
+#include "utilsv6.h"
 
 #define LEASES6_MAX 4096
 #define DUID_MAX_LEN 128
