@@ -5,7 +5,6 @@
 #include <stdbool.h>
 #include <netinet/in.h>
 
-
 #define HOSTNAME_MAX 256
 #define Ip6_STR_MAX 80
 #define DUID_MAX 130
@@ -34,7 +33,6 @@ typedef struct
    char pool_start[Ip6_STR_MAX];
    char pool_end[Ip6_STR_MAX];
 
-
    struct in6_addr pool_start_bin;
    struct in6_addr pool_end_bin;
    bool has_pool_range; 
@@ -42,10 +40,10 @@ typedef struct
    char dns_servers[256];
    char domain_search[256];
 
-   char sntp_servers[256];       // "" = neconfigurat
+   char sntp_servers[256];       
    bool has_sntp_servers;
 
-   uint32_t info_refresh_time;   // 0 = neconfigurat
+   uint32_t info_refresh_time;   
    bool has_info_refresh_time;
 
    uint8_t preference;          
@@ -63,7 +61,6 @@ typedef struct
    dhcpv6_static_host_t hosts[MAX_HOSTS_PER_SUBNET];
    uint16_t host_count;
 
-
    //IA_PD
    bool pd_enabled;
    char pd_pool_start[Ip6_STR_MAX];
@@ -79,14 +76,12 @@ typedef struct
    bool has_icmp6_timeout;
 }dhcpv6_subnet_t;
 
-
 typedef struct{
     uint32_t default_lease_time;
     uint32_t max_lease_time;
 
     char global_dns_servers[256];
     char global_domain_search[256];
-
 
     char sntp_servers[256];
     bool has_sntp_servers;
@@ -106,7 +101,6 @@ typedef struct{
     bool icmp6_probe;              // enable/disable global ICMPv6 ping check
     uint32_t icmp6_timeout_ms;         // timeout for probe (ms)
     bool has_icmp6_timeout;
-
 }dhcpv6_global_t;
 
 
@@ -116,11 +110,65 @@ typedef struct{
     uint16_t subnet_count;
 }dhcpv6_config_t;
 
-
+/**
+ * @brief Load and parse a DHCPv6 configuration file.
+ *
+ * This function parses an ISC-like dhcpv6.conf syntax and fills the provided
+ * configuration structure with global options and per-subnet blocks.
+ * The function tolerates inline comments and ignores unknown dhcp6.* options.
+ *
+ * @param path   Path to the DHCPv6 configuration file.
+ * @param config Output structure that will be populated on success.
+ * @return 0 on success, -1 on error (e.g., file open failure or parse error).
+ */
 int load_config_v6(const char *path, dhcpv6_config_t *config);
+
+/**
+ * @brief Print the currently loaded DHCPv6 configuration (debug helper).
+ *
+ * This function dumps global settings and each subnet's settings to stdout,
+ * including pools, PD pools, and static hosts.
+ *
+ * @param config Pointer to the configuration to print.
+ */
 void dump_config_v6(const dhcpv6_config_t *config);
+
+/**
+ * @brief Find the subnet that matches a given IPv6 address.
+ *
+ * The function checks each configured subnet prefix and returns the first
+ * subnet for which the provided IPv6 address belongs to the subnet prefix.
+ *
+ * @param cfg Pointer to the DHCPv6 configuration.
+ * @param ip  IPv6 address to classify.
+ * @return Pointer to the matching subnet, or NULL if no subnet matches.
+ */
 dhcpv6_subnet_t *find_subnet_for_ipv6(const dhcpv6_config_t *cfg, const struct in6_addr *ip);
+
+/**
+ * @brief Find a static host entry inside a subnet by its DUID.
+ *
+ * Iterates the subnet's static host list and compares the stored DUID strings.
+ *
+ * @param subnet Pointer to the subnet in which to search.
+ * @param duid   DUID string of the client (as parsed from config).
+ * @return Pointer to the matching host entry, or NULL if not found.
+ */
 dhcpv6_static_host_t *find_host_by_duid(dhcpv6_subnet_t *subnet,const char *duid);
 
+/**
+ * @brief Convert all IPv6 textual fields to their binary representations.
+ *
+ * Converts:
+ * - subnet prefixes (prefix -> prefix_bin)
+ * - address pools (pool_start/pool_end -> pool_start_bin/pool_end_bin)
+ * - PD pools (pd_pool_start/pd_pool_end -> *_bin)
+ * - static host fixed IPv6 addresses (fixed_address6 -> fixed_addr6_bin)
+ *
+ * This is intended to be called once after parsing to avoid repeated conversions
+ * during runtime operations (e.g., subnet lookup, pool management).
+ *
+ * @param cfg Pointer to the DHCPv6 configuration to update in-place.
+ */
 void convert_all_to_binary(dhcpv6_config_t *cfg);
 #endif

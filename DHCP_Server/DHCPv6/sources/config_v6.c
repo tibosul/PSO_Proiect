@@ -729,6 +729,16 @@ int load_config_v6(const char *path, dhcpv6_config_t *cfg)
 
         parse_global_option(cfg,p);
     }
+    // Apply defaults and inheritance
+    if (cfg->global.default_lease_time == 0) cfg->global.default_lease_time = 3600;
+    if (cfg->global.max_lease_time == 0)     cfg->global.max_lease_time = 7200;
+
+    for (int i = 0; i < cfg->subnet_count; i++) {
+        dhcpv6_subnet_t* s = &cfg->subnets[i];
+        if (s->default_lease_time == 0) s->default_lease_time = cfg->global.default_lease_time;
+        if (s->max_lease_time == 0)     s->max_lease_time = cfg->global.max_lease_time;
+    }
+
     fclose(fp);
     return 0;
 }
