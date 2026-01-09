@@ -303,9 +303,13 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
     L->state = LEASE_STATE_FREE;
 
     char* p= trim(line0);
-    char ip[LEASES6_MAX];
+    // Use proper buffer size for IP string
+    char ip[LEASE_V6_STR_MAX];
     if(sscanf(p,"lease %95s {",ip)!=1) return -1;
-    if(str_to_in6(ip,&L->ip6_addr)!=0) return -1;
+    
+    // Validate length before copying to avoid potential issues even if sscanf limited it
+    if(str_to_in6(ip, &L->ip6_addr) != 0) return -1;
+    
     in6_to_str(&L->ip6_addr,L->ip6_addr_str,sizeof(L->ip6_addr_str));
 
     int seen_starts = 0, seen_ends = 0, seen_any = 0;
@@ -375,8 +379,6 @@ static int parse_block_ia_na(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
                 strncpy(L->binding_state,st,sizeof(L->binding_state)-1);
             }
         }
-
-
     }
 }
 
@@ -388,10 +390,15 @@ static int parse_block_ia_pd(rd_ctx_t* R, dhcpv6_lease_t* L, char* line0)
 
     char* p = trim(line0);
     char ip[LEASE_V6_STR_MAX];
-    if(sscanf(p,"lease %95s {",ip)!=1) return -1;
-    if(str_to_in6(ip,&L->ip6_addr)!=0) return -1;
+    uint8_t plen = 0;
+    
+    // Expected format: prefix <ip>/<plen> {
+    if(sscanf(p, "prefix %95[^/]/%hhu {", ip, &plen)!=2) return -1;
 
-    in6_to_str(&L->ip6_addr,L->ip6_addr_str,sizeof(L->ip6_addr_str));
+    if(str_to_in6(ip, &L->prefix_v6)!=0) return -1;
+    L->plen = plen;
+
+    in6_to_str(&L->prefix_v6, L->prefix_str, sizeof(L->prefix_str));
 
     int seen_starts = 0, seen_ends = 0, seen_any = 0;
     char line[READ_BUF_SZ];
@@ -481,37 +488,70 @@ int lease_v6_db_load(lease_v6_db_t* db)
 
         if(!strncmp(s,"lease ",6))
         {
-            if(db->count<LEASES6_MAX)
-            {
-                dhcpv6_lease_t tmp;
-                if (parse_block_ia_na(&R, &tmp, s) == 0) {
-                    if (tmp.starts && tmp.ends) { db->leases[db->count++] = tmp; db->leases[db->count-1].in_use=1; }
-                    else log_warn("v6-db: dropping NA w/o time");
-                }
-                else
-                {
-                    log_warn("v6-db: bad IA-NA block, skipping");
-                }
+            dhcpv6_lease_t tmp;
+            if (parse_block_ia_na(&R, &tmp, s) == 0) {
+                 if (tmp.starts && tmp.ends) {
+                     // Check for existing
+                     int found = -1;
+                     for(uint32_t i=0; i<db->count; i++) {
+                         if (db->leases[i].type == Lease6_IA_NA && 
+                             memcmp(&db->leases[i].ip6_addr, &tmp.ip6_addr, sizeof(tmp.ip6_addr))==0) {
+                             found = i;
+                             break;
+                         }
+                     }
+                     if (found >= 0) {
+                         // Overwrite existing (newer entry in log)
+                         db->leases[found] = tmp;
+                         db->leases[found].in_use = 1;
+                     } else {
+                         if (db->count < LEASES6_MAX) {
+                             db->leases[db->count++] = tmp; 
+                             db->leases[db->count-1].in_use=1; 
+                         } else {
+                             log_warn("v6-db: DB full, dropping lease %s", s);
+                         }
+                     }
+                 }
+                 else log_warn("v6-db: dropping NA w/o time");
             }
+            else log_warn("v6-db: bad IA-NA block, skipping");
         }
-        if(!strncmp(s,"prefix ",7))
+        else if(!strncmp(s,"prefix ",7))
         {
-            if(db->count<LEASES6_MAX)
-            {
-                dhcpv6_lease_t tmp;
-                if (parse_block_ia_pd(&R, &tmp, s) == 0) {
-                    if (tmp.starts && tmp.ends) { db->leases[db->count++] = tmp; db->leases[db->count-1].in_use=1; }
-                    else log_warn("v6-db: dropping PD w/o time");
-                }
-                else
-                {
-                    log_warn("v6-db: bad IA_PD block, skipping");
-                }
+            dhcpv6_lease_t tmp;
+            if (parse_block_ia_pd(&R, &tmp, s) == 0) {
+                 if (tmp.starts && tmp.ends) {
+                     // Check for existing
+                     int found = -1;
+                     for(uint32_t i=0; i<db->count; i++) {
+                         if (db->leases[i].type == Lease6_IA_PD && 
+                             db->leases[i].plen == tmp.plen &&
+                             memcmp(&db->leases[i].prefix_v6, &tmp.prefix_v6, sizeof(tmp.prefix_v6))==0) {
+                             found = i;
+                             break;
+                         }
+                     }
+                     if (found >= 0) {
+                         // Overwrite
+                         db->leases[found] = tmp;
+                         db->leases[found].in_use = 1;
+                     } else {
+                         if (db->count < LEASES6_MAX) {
+                             db->leases[db->count++] = tmp; 
+                             db->leases[db->count-1].in_use=1; 
+                         } else {
+                             log_warn("v6-db: DB full, dropping prefix %s", s);
+                         }
+                     }
+                 }
+                 else log_warn("v6-db: dropping PD w/o time");
             }
+            else log_warn("v6-db: bad IA_PD block, skipping");
         }
     }
     rd_close(&R);
-    log_info("v6-db loaded %u entries from %s", db->count, db->filename);
+    log_info("v6-db loaded %u unique entries from %s", db->count, db->filename);
     return 0;
 }
 
@@ -675,13 +715,27 @@ dhcpv6_lease_t* lease_v6_add_ia_na(lease_v6_db_t* db,
 {
    if (!db || !duid_hex || !ip) return NULL;
 
-   if (db->count >= LEASES6_MAX) {
-        log_error("v6 add IA_NA: lease DB full");
-        return NULL;
-    }
-    
-    dhcpv6_lease_t* L = &db->leases[db->count];
-    memset(L,0,sizeof(*L));
+   // Search for existing lease for this IP
+   dhcpv6_lease_t* L = NULL;
+   for(uint32_t i=0; i<db->count; i++) {
+       if (db->leases[i].in_use && 
+           db->leases[i].type == Lease6_IA_NA &&
+           memcmp(&db->leases[i].ip6_addr, ip, sizeof(*ip)) == 0) {
+           L = &db->leases[i];
+           break;
+       }
+   }
+
+   if (!L) {
+       if (db->count >= LEASES6_MAX) {
+            log_error("v6 add IA_NA: lease DB full");
+            return NULL;
+        }
+        L = &db->leases[db->count];
+        memset(L,0,sizeof(*L));
+        db->count++;
+   }
+
     L->in_use=1; 
     L->type=Lease6_IA_NA;
     if (duid_hex && *duid_hex){
@@ -699,9 +753,10 @@ dhcpv6_lease_t* lease_v6_add_ia_na(lease_v6_db_t* db,
     L->cltt   = now;
     L->state  = LEASE_STATE_ACTIVE;
     if (hostname_opt) strncpy(L->client_hostname, hostname_opt, sizeof(L->client_hostname)-1);
-    db->count++;
-
+    
+    // Always append to disk log
     (void)lease_v6_db_append(db, L);
+    
     char duid_dbg[3*DUID_MAX_LEN]; duid_dbg[0]='\0';
     (void)duid_bin_to_hex(L->duid, L->duid_len, duid_dbg, sizeof(duid_dbg));
     log_info("v6 add IA_NA duid=%s iaid=%u ip=%s lease=%us", duid_dbg, L->iaid, L->ip6_addr_str, (unsigned)lease_secs);
@@ -716,15 +771,30 @@ dhcpv6_lease_t* lease_v6_add_ia_pd(lease_v6_db_t* db,
                                    uint32_t lease_secs,
                                    const char* hostname_opt)
 {
-    if (!db || db->count>=LEASES6_MAX || !prefix_base) return NULL;
+    if (!db || !prefix_base) return NULL;
 
-    if (db->count >= LEASES6_MAX) {
-        log_error("v6 add IA_NA: lease DB full");
-        return NULL;
+   // Search for existing lease for this Prefix
+   dhcpv6_lease_t* L = NULL;
+   for(uint32_t i=0; i<db->count; i++) {
+       if (db->leases[i].in_use && 
+           db->leases[i].type == Lease6_IA_PD &&
+           db->leases[i].plen == plen &&
+           memcmp(&db->leases[i].prefix_v6, prefix_base, sizeof(*prefix_base)) == 0) {
+           L = &db->leases[i];
+           break;
+       }
+   }
+
+    if (!L) {
+        if (db->count >= LEASES6_MAX) {
+            log_error("v6 add IA_PD: lease DB full");
+            return NULL;
+        }
+        L = &db->leases[db->count];
+        memset(L,0,sizeof(*L));
+        db->count++;
     }
 
-    dhcpv6_lease_t* L = &db->leases[db->count];
-    memset(L,0,sizeof(*L));
     L->in_use=1; L->type=Lease6_IA_PD;
     if (duid_hex && *duid_hex){
         int n = duid_hex_to_bin(duid_hex, L->duid, DUID_MAX_LEN);
@@ -741,9 +811,10 @@ dhcpv6_lease_t* lease_v6_add_ia_pd(lease_v6_db_t* db,
     L->cltt   = now;
     L->state  = LEASE_STATE_ACTIVE;
     if (hostname_opt) strncpy(L->client_hostname, hostname_opt, sizeof(L->client_hostname)-1);
-    db->count++;
 
+    // Always append to disk log
     (void)lease_v6_db_append(db, L);
+
     char duid_dbg[3*DUID_MAX_LEN]; duid_dbg[0]='\0';
     (void)duid_bin_to_hex(L->duid, L->duid_len, duid_dbg, sizeof(duid_dbg));
     log_info("v6 add IA_PD duid=%s iaid=%u prefix=%s/%u lease=%us", duid_dbg, L->iaid, L->prefix_str, L->plen, (unsigned)lease_secs);

@@ -245,3 +245,84 @@ int duid_bin_to_hex(const uint8_t* in, uint16_t len, char* out, size_t out_sz)
     out[pos] = '\0';
     return (int)pos;
 }
+
+// Parses a comma-separated list of IPv6 addresses (e.g. "2001:db8::1, 2001:db8::2")
+int str_to_ipv6_list(const char *str, struct in6_addr *out, size_t max_count)
+{
+    if (!str || !out || max_count == 0) return 0;
+
+    char tmp[512]; // reasonable max length for config line fragment
+    strncpy(tmp, str, sizeof(tmp)-1);
+    tmp[sizeof(tmp)-1] = '\0';
+
+    int count = 0;
+    char *saveptr;
+    char *token = strtok_r(tmp, ",", &saveptr);
+
+    while (token && count < (int)max_count) {
+        // Trim whitespace
+        char *p = lskip(token);
+        rstrip(p);
+
+        if (*p) {
+            struct in6_addr addr;
+            if (inet_pton(AF_INET6, p, &addr) == 1) {
+                out[count++] = addr;
+            }
+        }
+        token = strtok_r(NULL, ",", &saveptr);
+    }
+    return count;
+}
+
+// Encodes a domain name into RFC 1035 format (e.g., "example.com" -> "\x07example\x03com\x00")
+// Returns the length written, or -1 on error.
+int encode_domain_name(const char *domain, uint8_t *buf, size_t len)
+{
+    if (!domain || !buf || len == 0) return -1;
+
+    // Work on a copy since we might modify it or need to scan it
+    char d[256];
+    strncpy(d, domain, sizeof(d)-1);
+    d[sizeof(d)-1] = '\0';
+    
+    // Remove potential trailing dot for root
+    size_t dlen = strlen(d);
+    if (dlen > 0 && d[dlen-1] == '.') {
+        d[dlen-1] = '\0';
+    }
+
+    size_t pos = 0;
+    char *start = d;
+    char *end = NULL;
+
+    while (*start) {
+        end = strchr(start, '.');
+        if (!end) {
+            // Last label
+            size_t label_len = strlen(start);
+            if (pos + 1 + label_len >= len) return -1;
+            
+            buf[pos++] = (uint8_t)label_len;
+            memcpy(buf + pos, start, label_len);
+            pos += label_len;
+            break;
+        } else {
+            // Found a dot
+            size_t label_len = (size_t)(end - start);
+            if (pos + 1 + label_len >= len) return -1;
+
+            buf[pos++] = (uint8_t)label_len;
+            memcpy(buf + pos, start, label_len);
+            pos += label_len;
+            
+            start = end + 1;
+        }
+    }
+
+    // Terminating zero
+    if (pos >= len) return -1;
+    buf[pos++] = 0;
+
+    return (int)pos;
+}
