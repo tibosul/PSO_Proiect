@@ -14,14 +14,14 @@ authoring-byte-order little-endian;
 #   client-hostname "..."; vendor-class "..."; fqdn "...";
 # }
 # prefix <ipv6>/<plen> { ... }  # for IA_PD
-# Last updated: Sat Jan 10 00:53:43 2026
+# Last updated: Sat Jan 10 01:17:17 2026
 
 
-lease 2001:db8:1::1008 {
-	starts 6 2026/01/10 00:53:38;
-	ends 6 2026/01/10 01:53:38;
-	tstp 6 2026/01/10 00:53:38;
-	cltt 6 2026/01/10 00:53:38;
+lease 2001:db8:1::1009 {
+	starts 6 2026/01/10 01:17:09;
+	ends 6 2026/01/10 02:17:09;
+	tstp 6 2026/01/10 01:17:09;
+	cltt 6 2026/01/10 01:17:09;
 	duid 00:03:00:01:08:00:27:2c:df:4b;
 	iaid 1;
 	binding state active;

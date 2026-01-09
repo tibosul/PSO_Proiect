@@ -5,7 +5,6 @@
 #include <time.h>
 #include <stdbool.h>
 #include <netinet/in.h>
-#include "time_utils.h"
 #include "utilsv6.h"
 
 #define LEASES6_MAX 4096
