@@ -170,6 +170,12 @@ bool ip_is_broadcast_address(struct in_addr ip, struct in_addr network, struct i
  */
 bool ip_is_gateway(struct in_addr ip, struct in_addr gateway);
 
+/** @brief Check if an IP address is a loopback address (127.0.0.0/8)
+ *  @param ip IP address to check.
+ *  @return true if it is a loopback address, false otherwise.
+ */
+bool ip_is_loopback(struct in_addr ip);
+
 /**
  * @brief Perform a ping check on the given IP address.
  * @param ip IP address to ping.

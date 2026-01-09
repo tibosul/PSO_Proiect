@@ -93,6 +93,12 @@ bool ip_is_gateway(struct in_addr ip, struct in_addr gateway)
     return ip.s_addr == gateway.s_addr;
 }
 
+bool ip_is_loopback(struct in_addr ip)
+{
+    uint32_t ip_val = ntohl(ip.s_addr);
+    return (ip_val >= 0x7F000000 && ip_val <= 0x7FFFFFFF);
+}
+
 struct ip_pool_entry_t *ip_pool_find_entry(struct ip_pool_t *pool, struct in_addr ip)
 {
     if (!pool)
@@ -502,8 +508,8 @@ struct ip_allocation_result_t ip_pool_allocate(struct ip_pool_t *pool, const uin
     {
         if (ip_pool_is_in_range(pool, requested_ip) && ip_pool_is_available(pool, requested_ip))
         {
-            // Ping check if enabled
-            if (config->global.ping_check)
+            // Ping check if enabled and not a loopback address
+            if (config->global.ping_check && !ip_is_loopback(requested_ip))
             {
                 if (ip_ping_check(requested_ip, config->global.ping_timeout * 1000))
                 {
@@ -563,8 +569,8 @@ struct ip_allocation_result_t ip_pool_allocate(struct ip_pool_t *pool, const uin
 
         if (entry->state == IP_STATE_AVAILABLE)
         {
-            // Ping check if enabled
-            if (config->global.ping_check)
+            // Ping check if enabled and not a loopback address
+            if (config->global.ping_check && !ip_is_loopback(entry->ip_address))
             {
                 if (ip_ping_check(entry->ip_address, config->global.ping_timeout * 1000))
                 {
@@ -588,7 +594,6 @@ struct ip_allocation_result_t ip_pool_allocate(struct ip_pool_t *pool, const uin
         }
     }
 
-    // No available IPs
     // No available IPs
     result.success = false;
     snprintf(result.error_message, sizeof(result.error_message), "No available IPs in pool");
