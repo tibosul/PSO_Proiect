@@ -11,7 +11,7 @@
 
 #define MAX_POOL_SIZE 1024
 
-typedef enum
+typedef enum ip_state_t
 {
     IP_STATE_AVAILABLE = 0,
     IP_STATE_ALLOCATED,

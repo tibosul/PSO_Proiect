@@ -13,7 +13,7 @@
 #define MAX_CLIENT_ID_LEN 64
 #define MAX_VENDOR_CLASS_LEN 128
 
-typedef enum
+typedef enum lease_state_t
 {
     LEASE_STATE_FREE = 0,  // Available for allocation
     LEASE_STATE_ACTIVE,    // Currently leased
@@ -106,7 +106,7 @@ struct lease_timer_t
 /**
  * @brief I/O queue operation type.
  */
-typedef enum
+typedef enum io_operation_type_t
 {
     IO_OP_SAVE_LEASE,   // Append single lease to file
     IO_OP_SAVE_ALL,     // Save entire database to file

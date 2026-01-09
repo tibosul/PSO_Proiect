@@ -13,7 +13,7 @@
 #define MAX_HOSTNAME_LENGTH 256
 #define MAX_DOMAIN_LENGTH 256
 
-typedef enum
+typedef enum ddns_update_style_t
 {
     DDNS_NONE = 0,
     DDNS_INTERIM,

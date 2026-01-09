@@ -223,8 +223,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
     uint32_t end_ip = ntohl(subnet->range_end.s_addr);
 
     pool->pool_size = 0;
-    for (uint32_t ip_val = start_ip;
-    ip_val <= end_ip && pool->pool_size < MAX_POOL_SIZE; ip_val++)
+    for (uint32_t ip_val = start_ip; ip_val <= end_ip && pool->pool_size < MAX_POOL_SIZE; ip_val++)
     {
         struct ip_pool_entry_t *entry = &pool->entries[pool->pool_size];
         entry->ip_address.s_addr = htonl(ip_val);
@@ -255,8 +254,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
     for (uint32_t i = 0; i < subnet->host_count; i++)
     {
         struct dhcp_host_reservation_t *host = &subnet->hosts[i];
-        struct ip_pool_entry_t *entry =
-        ip_pool_find_entry(pool, host->fixed_address);
+        struct ip_pool_entry_t *entry = ip_pool_find_entry(pool, host->fixed_address);
 
         if (entry)
         {
@@ -280,8 +278,7 @@ int ip_pool_init(struct ip_pool_t *pool, struct dhcp_subnet_t *subnet, struct le
                 lease->state = LEASE_STATE_EXPIRED;
             }
 
-            struct ip_pool_entry_t *entry =
-            ip_pool_find_entry(pool, lease->ip_address);
+            struct ip_pool_entry_t *entry = ip_pool_find_entry(pool, lease->ip_address);
             if (!entry)
                 continue; // IP not in this pool's range
 
@@ -366,7 +363,6 @@ int ip_pool_reserve_ip(struct ip_pool_t *pool, struct in_addr ip, const uint8_t 
         return -1;
     }
 
-    // Don't allow reserving static reservations or excluded IPs
     // Don't allow reserving static reservations or excluded IPs
     if (entry->state == IP_STATE_RESERVED || entry->state == IP_STATE_EXCLUDED)
     {
