@@ -789,3 +789,203 @@ void ip_pool_print_detailed(const struct ip_pool_t *pool)
         printf("\n");
     }
 }
+
+//=============================================================================
+// IP Pool Sync Thread Operations
+//=============================================================================
+
+// Forward declaration of sync thread function
+static void *ip_pool_sync_thread_func(void *arg);
+
+int ip_pool_sync_init(struct ip_pool_sync_t *sync, struct ip_pool_t *pool,
+                      struct lease_database_t *lease_db, uint32_t sync_interval_sec)
+{
+    if (!sync || !pool || !lease_db || sync_interval_sec == 0)
+        return -1;
+
+    memset(sync, 0, sizeof(struct ip_pool_sync_t));
+
+    sync->pool = pool;
+    sync->lease_db = lease_db;
+    sync->sync_interval_sec = sync_interval_sec;
+    sync->running = false;
+    sync->sync_count = 0;
+    sync->entries_updated = 0;
+
+    if (pthread_mutex_init(&sync->sync_mutex, NULL) != 0)
+    {
+        perror("Failed to initialize sync mutex");
+        return -1;
+    }
+
+    if (pthread_cond_init(&sync->sync_cond, NULL) != 0)
+    {
+        perror("Failed to initialize sync condition variable");
+        pthread_mutex_destroy(&sync->sync_mutex);
+        return -1;
+    }
+
+    sync->mutex_initialized = true;
+
+    printf("IP pool sync initialized (interval: %u seconds)\n", sync_interval_sec);
+    return 0;
+}
+
+int ip_pool_sync_start(struct ip_pool_sync_t *sync)
+{
+    if (!sync || !sync->mutex_initialized)
+        return -1;
+
+    pthread_mutex_lock(&sync->sync_mutex);
+
+    if (sync->running)
+    {
+        pthread_mutex_unlock(&sync->sync_mutex);
+        return -1; // Already running
+    }
+
+    sync->running = true;
+    pthread_mutex_unlock(&sync->sync_mutex);
+
+    if (pthread_create(&sync->sync_thread, NULL, ip_pool_sync_thread_func, sync) != 0)
+    {
+        perror("Failed to create sync thread");
+        pthread_mutex_lock(&sync->sync_mutex);
+        sync->running = false;
+        pthread_mutex_unlock(&sync->sync_mutex);
+        return -1;
+    }
+
+    printf("IP pool sync thread started\n");
+    return 0;
+}
+
+void ip_pool_sync_stop(struct ip_pool_sync_t *sync)
+{
+    if (!sync || !sync->mutex_initialized)
+        return;
+
+    pthread_mutex_lock(&sync->sync_mutex);
+    if (!sync->running)
+    {
+        pthread_mutex_unlock(&sync->sync_mutex);
+        return;
+    }
+
+    sync->running = false;
+    pthread_cond_signal(&sync->sync_cond);
+    pthread_mutex_unlock(&sync->sync_mutex);
+
+    pthread_join(sync->sync_thread, NULL);
+
+    pthread_mutex_destroy(&sync->sync_mutex);
+    pthread_cond_destroy(&sync->sync_cond);
+    sync->mutex_initialized = false;
+
+    printf("IP pool sync thread stopped (syncs: %lu, entries updated: %lu)\n", sync->sync_count, sync->entries_updated);
+}
+
+void ip_pool_sync_wakeup(struct ip_pool_sync_t *sync)
+{
+    if (!sync || !sync->mutex_initialized)
+        return;
+
+    pthread_mutex_lock(&sync->sync_mutex);
+    pthread_cond_signal(&sync->sync_cond);
+    pthread_mutex_unlock(&sync->sync_mutex);
+}
+
+bool ip_pool_sync_is_running(const struct ip_pool_sync_t *sync)
+{
+    if (!sync || !sync->mutex_initialized)
+        return false;
+
+    return sync->running;
+}
+
+// Sync thread function - runs in background
+static void *ip_pool_sync_thread_func(void *arg)
+{
+    struct ip_pool_sync_t *sync = (struct ip_pool_sync_t *)arg;
+    if (!sync)
+        return NULL;
+
+    printf("IP pool sync thread started (PID: %d, TID: %lu)\n", getpid(), pthread_self());
+
+    while (1)
+    {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += sync->sync_interval_sec;
+
+        pthread_mutex_lock(&sync->sync_mutex);
+        pthread_cond_timedwait(&sync->sync_cond, &sync->sync_mutex, &ts);
+
+        bool should_run = sync->running;
+        pthread_mutex_unlock(&sync->sync_mutex);
+
+        if (!should_run)
+            break;
+
+        // Perform synchronization
+        pthread_mutex_lock(&sync->pool->mutex);
+        pthread_mutex_lock(&sync->lease_db->db_mutex);
+
+        uint64_t updated = 0;
+        time_t now = time(NULL);
+
+        for (uint32_t i = 0; i < sync->lease_db->lease_count; i++)
+        {
+            struct dhcp_lease_t *lease = &sync->lease_db->leases[i];
+            struct ip_pool_entry_t *entry = ip_pool_find_entry(sync->pool, lease->ip_address);
+
+            if (!entry || entry->state == IP_STATE_RESERVED || entry->state == IP_STATE_EXCLUDED)
+                continue;
+
+            // Check if lease expired and update if needed
+            if (lease->state == LEASE_STATE_ACTIVE && lease->end_time < now)
+            {
+                lease->state = LEASE_STATE_EXPIRED;
+            }
+
+            ip_state_t expected_state = ip_state_from_lease_state(lease->state);
+
+            if (entry->state != expected_state)
+            {
+                // Update counters
+                if (entry->state == IP_STATE_AVAILABLE)
+                    sync->pool->available_count--;
+                else if (entry->state == IP_STATE_ALLOCATED)
+                    sync->pool->allocated_count--;
+
+                if (expected_state == IP_STATE_AVAILABLE)
+                    sync->pool->available_count++;
+                else if (expected_state == IP_STATE_ALLOCATED)
+                    sync->pool->allocated_count++;
+
+                entry->state = expected_state;
+
+                if (expected_state == IP_STATE_AVAILABLE)
+                    memset(entry->mac_address, 0, 6);
+                else if (expected_state == IP_STATE_ALLOCATED)
+                    memcpy(entry->mac_address, lease->mac_address, 6);
+
+                updated++;
+            }
+        }
+
+        pthread_mutex_unlock(&sync->lease_db->db_mutex);
+        pthread_mutex_unlock(&sync->pool->mutex);
+
+        sync->sync_count++;
+        sync->entries_updated += updated;
+
+        if (updated > 0)
+        {
+            printf("[Sync] Updated %lu pool entries\n", updated);
+        }
+    }
+
+    printf("IP pool sync thread exiting\n");
+    return NULL;
+}

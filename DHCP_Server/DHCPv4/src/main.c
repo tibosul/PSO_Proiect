@@ -30,6 +30,7 @@ struct server_context_t
     struct lease_database_t lease_db;
     struct dhcp_config_t config;
     struct ip_pool_t pools[MAX_SUBNETS];
+    struct ip_pool_sync_t pool_syncs[MAX_SUBNETS];
     int pool_count;
 };
 
@@ -293,7 +294,17 @@ int main(int argc, char *argv[])
                      &g_server.lease_db);
     }
 
-    // 5. Initialize Thread Pool
+    // 5. Initialize and start IP Pool sync threads (sync every 30 seconds)
+    for (int i = 0; i < g_server.pool_count; i++)
+    {
+        if (ip_pool_sync_init(&g_server.pool_syncs[i], &g_server.pools[i],
+                              &g_server.lease_db, 30) == 0)
+        {
+            ip_pool_sync_start(&g_server.pool_syncs[i]);
+        }
+    }
+
+    // 6. Initialize Worker Thread Pool
     struct thread_pool_t *tpool = thread_pool_create(4, 1024);
     if (!tpool)
     {
@@ -303,7 +314,7 @@ int main(int argc, char *argv[])
     }
     log_info("Thread pool initialized with 4 workers");
 
-    // 6. Bind Socket
+    // 7. Bind Socket
     if ((g_server.sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
         perror("socket");
@@ -339,7 +350,7 @@ int main(int argc, char *argv[])
     }
     log_info("Server listening on port %d...", ntohs(server_addr.sin_port));
 
-    // 7. Main Loop
+    // 8. Main Loop
     while (g_running)
     {
         struct packet_task_t *task = malloc(sizeof(struct packet_task_t));
@@ -370,10 +381,16 @@ int main(int argc, char *argv[])
         }
     }
 
-    // 8. Cleanup
+    // 9. Cleanup
     log_info("Shutting down...");
     thread_pool_destroy(tpool, 0);
     close(g_server.sockfd);
+
+    // Stop sync threads first
+    for (int i = 0; i < g_server.pool_count; i++)
+    {
+        ip_pool_sync_stop(&g_server.pool_syncs[i]);
+    }
 
     for (int i = 0; i < g_server.pool_count; i++)
     {

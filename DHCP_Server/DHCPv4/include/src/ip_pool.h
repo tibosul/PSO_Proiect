@@ -55,6 +55,29 @@ struct ip_pool_t
     pthread_mutex_t mutex;
 };
 
+/**
+ * @brief Synchronization thread for keeping IP pool in sync with lease database.
+ *
+ * This thread periodically synchronizes the IP pool state with the lease database,
+ * ensuring that expired/released leases are reflected in the pool's available count.
+ */
+struct ip_pool_sync_t
+{
+    struct ip_pool_t *pool;
+    struct lease_database_t *lease_db;
+    uint32_t sync_interval_sec;
+
+    pthread_t sync_thread;
+    pthread_mutex_t sync_mutex;
+    pthread_cond_t sync_cond;
+    bool running;
+    bool mutex_initialized;
+
+    // Statistics
+    uint64_t sync_count;
+    uint64_t entries_updated;
+};
+
 struct ip_allocation_result_t
 {
     bool success;
@@ -218,6 +241,43 @@ int ip_pool_sync_with_leases(struct ip_pool_t *pool, struct lease_database_t *le
  * @return 0 on success, -1 on failure.
  */
 int ip_pool_update_from_lease(struct ip_pool_t *pool, struct dhcp_lease_t *lease);
+
+/**
+ * @brief Initialize the IP pool synchronization thread.
+ * @param sync Pointer to ip_pool_sync_t structure to initialize.
+ * @param pool Pointer to ip_pool_t structure to synchronize.
+ * @param lease_db Pointer to lease_database_t structure.
+ * @param sync_interval_sec Interval in seconds between sync operations.
+ * @return 0 on success, -1 on failure.
+ */
+int ip_pool_sync_init(struct ip_pool_sync_t *sync, struct ip_pool_t *pool,
+                      struct lease_database_t *lease_db, uint32_t sync_interval_sec);
+
+/**
+ * @brief Start the IP pool synchronization thread.
+ * @param sync Pointer to ip_pool_sync_t structure.
+ * @return 0 on success, -1 on failure.
+ */
+int ip_pool_sync_start(struct ip_pool_sync_t *sync);
+
+/**
+ * @brief Stop the IP pool synchronization thread.
+ * @param sync Pointer to ip_pool_sync_t structure.
+ */
+void ip_pool_sync_stop(struct ip_pool_sync_t *sync);
+
+/**
+ * @brief Wake up the sync thread to perform immediate synchronization.
+ * @param sync Pointer to ip_pool_sync_t structure.
+ */
+void ip_pool_sync_wakeup(struct ip_pool_sync_t *sync);
+
+/**
+ * @brief Check if the sync thread is running.
+ * @param sync Pointer to ip_pool_sync_t structure.
+ * @return true if running, false otherwise.
+ */
+bool ip_pool_sync_is_running(const struct ip_pool_sync_t *sync);
 
 /**
  * @brief Allocate an IP address and create or renew a lease in the lease database.
