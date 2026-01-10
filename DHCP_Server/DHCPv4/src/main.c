@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
+#include <net/if.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -256,6 +257,9 @@ int main(int argc, char *argv[])
     init_logger("[DHCPv4-Server]", LOG_DEBUG, true, "logs/dhcpv4_server.log");
 
     log_info("Starting DHCPv4 Server...");
+    log_info("Usage: %s [config_file] [interface]", argc > 0 ? argv[0] : "dhcpv4_server");
+    log_info("  config_file: path to config (default: %s)", SERVER_CONFIG_FILE);
+    log_info("  interface: bind to specific interface (e.g., vmnet1, eth0)");
 
     // 1. Initialize Signal Handlers
     signal(SIGINT, handle_signal);
@@ -331,6 +335,24 @@ int main(int argc, char *argv[])
     int reuse_addr = 1;
     setsockopt(g_server.sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse_addr,
                sizeof(reuse_addr));
+
+    // Bind to specific interface if provided (argv[2])
+    // This is CRITICAL for systems with multiple interfaces to ensure
+    // broadcast replies go out the correct interface
+    if (argc > 2)
+    {
+        const char *interface = argv[2];
+        if (setsockopt(g_server.sockfd, SOL_SOCKET, SO_BINDTODEVICE,
+                       interface, strlen(interface) + 1) < 0)
+        {
+            log_error("Failed to bind to interface %s: %s", interface, strerror(errno));
+            log_info("Note: SO_BINDTODEVICE requires root/CAP_NET_RAW");
+            close(g_server.sockfd);
+            close_logger();
+            return 1;
+        }
+        log_info("Socket bound to interface: %s", interface);
+    }
 
     struct sockaddr_in server_addr = {0};
     server_addr.sin_family = AF_INET;
