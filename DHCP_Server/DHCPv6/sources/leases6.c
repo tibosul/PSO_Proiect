@@ -43,7 +43,12 @@ static void rtrim_inplace(char* s){
     s[--n]='\0';
 }
 
-static char* trim(char* s){return rtrim_inplace(ltrim(s)),s;}
+static char* trim(char* s)
+{
+    s = ltrim(s);
+    rtrim_inplace(s);
+    return s;
+}
 
 static time_t parse_lease_time_any(const char* s)
 {
@@ -1001,6 +1006,7 @@ int lease_v6_set_state(lease_v6_db_t* db, const struct in6_addr* ip6_addr, lease
             L->in_use   = 1;
             L->type     = Lease6_IA_NA;
             L->ip6_addr = *ip6_addr;
+            in6_to_str(&L->ip6_addr, L->ip6_addr_str, sizeof(L->ip6_addr_str));
         } else {
             return 0;
         }
