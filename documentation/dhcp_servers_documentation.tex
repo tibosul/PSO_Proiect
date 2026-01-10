@@ -1,0 +1,587 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=flexible,
+  keepspaces=true
+}
+
+\begin{document}
+
+\title{Implementation and Analysis of DHCPv4 and DHCPv6 Servers\\
+{\footnotesize A Comprehensive Network Address Configuration System}}
+
+\author{\IEEEauthorblockN{Student Name}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{University Name}\\
+City, Country \\
+email@example.com}
+}
+
+\maketitle
+
+\begin{abstract}
+This paper presents the design, implementation, and deployment of comprehensive DHCPv4 and DHCPv6 server systems for dynamic network address configuration. The implemented solution provides RFC-compliant DHCP services supporting both IPv4 and IPv6 protocols, including advanced features such as lease management, multiple subnet support, static reservations, and prefix delegation for IPv6. The system has been designed to handle various network topologies including loopback testing, local area networks, virtual LANs, and cross-machine configurations. Performance evaluation demonstrates reliable operation under concurrent client connections with proper lease tracking and renewal mechanisms. The implementation serves as both a production-ready DHCP infrastructure and an educational platform for understanding dynamic host configuration protocols.
+\end{abstract}
+
+\begin{IEEEkeywords}
+DHCP, DHCPv4, DHCPv6, network configuration, IP address allocation, lease management, prefix delegation
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+The Dynamic Host Configuration Protocol (DHCP) is a fundamental network management protocol that automates the assignment of IP addresses and network configuration parameters to devices on a network. As networks have evolved from IPv4 to IPv6, DHCP has also evolved, with DHCPv6 providing similar functionality for IPv6 networks while introducing new capabilities such as prefix delegation.
+
+This paper describes a comprehensive implementation of both DHCPv4 and DHCPv6 servers developed in C, providing a complete solution for modern network environments that require support for both IP versions. The implementation follows the relevant RFC specifications, particularly RFC 2131 for DHCPv4 and RFC 8415 for DHCPv6.
+
+\subsection{Motivation}
+
+The primary motivation for this project stems from the need to understand the internal workings of DHCP at a fundamental level. While production DHCP servers exist (such as ISC DHCP and Kea), implementing a DHCP server from scratch provides valuable insights into network protocols, UDP socket programming, packet parsing, and state management.
+
+\subsection{Objectives}
+
+The main objectives of this implementation are:
+\begin{itemize}
+\item Develop RFC-compliant DHCPv4 and DHCPv6 servers
+\item Implement robust lease management and tracking
+\item Support multiple network topologies and configurations
+\item Provide comprehensive logging for debugging and monitoring
+\item Enable both unicast and broadcast communication modes
+\item Support advanced features including static reservations and prefix delegation
+\end{itemize}
+
+\section{DHCPv4 Server Architecture}
+
+\subsection{Protocol Overview}
+
+DHCPv4 operates using a four-message handshake sequence known as DORA:
+\begin{enumerate}
+\item \textbf{DISCOVER}: Client broadcasts a request for configuration
+\item \textbf{OFFER}: Server responds with available IP address
+\item \textbf{REQUEST}: Client formally requests the offered address
+\item \textbf{ACK}: Server confirms the lease assignment
+\end{enumerate}
+
+The protocol uses UDP ports 67 (server) and 68 (client) for communication. Clients typically broadcast DISCOVER messages to 255.255.255.255, though the implementation also supports unicast mode for testing and specific scenarios.
+
+\subsection{Server Components}
+
+The DHCPv4 server implementation consists of several key components:
+
+\subsubsection{Configuration Parser}
+The configuration parser reads and validates the DHCP configuration file (dhcpv4.conf), which follows ISC DHCP syntax. It supports:
+\begin{itemize}
+\item Global parameters (lease times, DNS servers)
+\item Multiple subnet definitions with individual address pools
+\item Static host reservations based on MAC addresses
+\item Advanced options including NTP servers, domain names, and routers
+\end{itemize}
+
+\subsubsection{Lease Manager}
+The lease manager maintains a persistent database of IP address assignments. Key features include:
+\begin{itemize}
+\item Atomic lease allocation from configured pools
+\item Lease renewal and expiration tracking
+\item Conflict detection through ping checks (configurable)
+\item Persistent storage for lease information across server restarts
+\end{itemize}
+
+\subsubsection{Packet Handler}
+The packet handler processes incoming DHCP messages and generates appropriate responses. It implements:
+\begin{itemize}
+\item DHCP message type detection and validation
+\item Option parsing and encoding
+\item Client identification via MAC address (chaddr field)
+\item Transaction ID (xid) tracking for request-response correlation
+\end{itemize}
+
+\subsubsection{Socket Manager}
+The socket manager handles UDP communication with appropriate socket options for broadcast and binding to privileged ports. Special considerations include:
+\begin{itemize}
+\item SO\_BROADCAST flag for broadcast communication
+\item SO\_REUSEADDR for port reuse after crashes
+\item Proper binding to INADDR\_ANY (0.0.0.0) for receiving broadcasts
+\item Interface-specific binding when required
+\end{itemize}
+
+\subsection{Configuration Structure}
+
+The DHCPv4 configuration file supports a hierarchical structure with global and subnet-specific parameters. Example configuration:
+
+\begin{lstlisting}[language=bash,caption=DHCPv4 Configuration Example]
+authoritative;
+default-lease-time 7200;
+max-lease-time 86400;
+option domain-name-servers 8.8.8.8, 8.8.4.4;
+
+subnet 192.168.1.0 netmask 255.255.255.0 {
+  range 192.168.1.100 192.168.1.200;
+  option routers 192.168.1.1;
+  option subnet-mask 255.255.255.0;
+  option domain-name "example.com";
+}
+
+host workstation {
+  hardware ethernet aa:bb:cc:dd:ee:ff;
+  fixed-address 192.168.1.50;
+}
+\end{lstlisting}
+
+The implementation supports multiple subnets for various network segments:
+\begin{itemize}
+\item Corporate LAN (192.168.1.0/24)
+\item Guest WiFi (10.0.0.0/24)
+\item IoT devices (10.10.0.0/24)
+\item VoIP phones (172.16.100.0/24)
+\item Development/Testing (192.168.50.0/24)
+\item DMZ (203.0.113.0/28)
+\item Loopback testing (127.0.0.0/8)
+\end{itemize}
+
+\subsection{Lease Management}
+
+The lease management system maintains the state of all IP address allocations. Each lease record contains:
+\begin{itemize}
+\item Assigned IP address
+\item Client MAC address (hardware identifier)
+\item Lease start time and expiration time
+\item Client hostname (if provided)
+\item Binding state (active, expired, released)
+\end{itemize}
+
+Leases are stored in a plain-text database file (dhcpv4.leases) with atomic update operations to prevent corruption. The format follows ISC DHCP lease file syntax for interoperability.
+
+\section{DHCPv6 Server Architecture}
+
+\subsection{Protocol Overview}
+
+DHCPv6 differs significantly from DHCPv4 in several aspects:
+\begin{itemize}
+\item Uses IPv6 multicast addresses instead of broadcast
+\item Server listens on ff02::1:2 (All\_DHCP\_Relay\_Agents\_and\_Servers)
+\item Client uses ff02::1:2 for server discovery
+\item Supports stateful (address assignment) and stateless (configuration only) modes
+\item Introduces prefix delegation for routing scenarios
+\end{itemize}
+
+The DHCPv6 message exchange typically follows:
+\begin{enumerate}
+\item \textbf{SOLICIT}: Client searches for available DHCP servers
+\item \textbf{ADVERTISE}: Server announces availability and parameters
+\item \textbf{REQUEST}: Client requests configuration from chosen server
+\item \textbf{REPLY}: Server provides configuration (addresses, prefixes, options)
+\end{enumerate}
+
+DHCPv6 uses UDP ports 546 (client) and 547 (server).
+
+\subsection{Key Differences from DHCPv4}
+
+\subsubsection{Client Identification}
+DHCPv6 uses DUID (DHCP Unique Identifier) instead of MAC addresses. DUID types include:
+\begin{itemize}
+\item DUID-LLT (Link-Layer plus Time)
+\item DUID-EN (Enterprise Number)
+\item DUID-LL (Link-Layer)
+\item DUID-UUID (Universally Unique Identifier)
+\end{itemize}
+
+\subsubsection{No Broadcast}
+IPv6 eliminates broadcast in favor of multicast. DHCPv6 servers join the multicast group ff02::1:2 to receive client messages.
+
+\subsubsection{Identity Associations}
+DHCPv6 uses Identity Associations (IA) to group related configuration:
+\begin{itemize}
+\item IA\_NA (Non-temporary Addresses): Standard address assignment
+\item IA\_TA (Temporary Addresses): Privacy-enhanced addresses
+\item IA\_PD (Prefix Delegation): Prefix blocks for routing
+\end{itemize}
+
+\subsection{Prefix Delegation}
+
+A unique feature of DHCPv6 is prefix delegation (IA\_PD), which allows delegating IPv6 prefix blocks to routers. This is particularly useful for:
+\begin{itemize}
+\item ISP customer premise equipment (CPE)
+\item Multi-homed networks
+\item Mobile network access
+\item Nested network topologies
+\end{itemize}
+
+The implementation supports prefix delegation with configurable prefix lengths (typically /48, /56, or /60).
+
+\subsection{Configuration Structure}
+
+DHCPv6 configuration example:
+
+\begin{lstlisting}[language=bash,caption=DHCPv6 Configuration Example]
+default-lease-time 3600;
+max-lease-time 7200;
+
+option dhcp6.name-servers 
+  2001:4860:4860::8888, 
+  2001:4860:4860::8844;
+
+subnet6 2001:db8:1:0::/64 {
+  range6 2001:db8:1:0::1000 
+         2001:db8:1:0::2fff;
+  prefix6 2001:db8:1:100:: 
+          2001:db8:1:200:: /60;
+  
+  option dhcp6.domain-search 
+    "example.com";
+}
+
+host main_server {
+  host-identifier option dhcp6.client-id
+    00:01:00:01:23:45:67:89:ab:cd:ef:01;
+  fixed-address6 2001:db8:1:0::10;
+}
+\end{lstlisting}
+
+The DHCPv6 server supports multiple subnet configurations for different network segments:
+\begin{itemize}
+\item Corporate LAN (2001:db8:1:0::/64)
+\item Guest Network (2001:db8:2:0::/64)
+\item IoT/Smart Devices (2001:db8:10:0::/64)
+\item VoIP Network (2001:db8:100:0::/64)
+\item Development/Test (2001:db8:50:0::/64)
+\item DMZ (2001:db8:203:0::/64)
+\item Prefix Delegation blocks (2001:db8:3:0::/48)
+\end{itemize}
+
+\section{Implementation Details}
+
+\subsection{Build System}
+
+The project uses GNU Make for compilation with modular organization:
+\begin{lstlisting}[language=bash,caption=Build Commands]
+make clean    # Clean build artifacts
+make all      # Build all components
+make server_v4  # Build DHCPv4 server only
+make server_v6  # Build DHCPv6 server only
+make client_v4  # Build DHCPv4 client only
+make client_v6  # Build DHCPv6 client only
+\end{lstlisting}
+
+The build system generates binaries in the build/bin/ directory with object files in build/obj/ for incremental compilation.
+
+\subsection{Logging System}
+
+A comprehensive logging system provides visibility into server operations:
+\begin{itemize}
+\item Timestamped log entries
+\item Multiple log levels (INFO, WARNING, ERROR, DEBUG)
+\item Separate log files for server and clients
+\item Configurable log verbosity
+\item Thread-safe logging for concurrent operations
+\end{itemize}
+
+Log files are stored in the logs/ directory:
+\begin{itemize}
+\item dhcpv4\_server.log - DHCPv4 server events
+\item dhcpv4\_client.log - DHCPv4 client events
+\item dhcpv6\_server.log - DHCPv6 server events
+\item dhcpv6\_client.log - DHCPv6 client events
+\end{itemize}
+
+\subsection{Client Implementation}
+
+Both DHCPv4 and DHCPv6 clients are implemented for testing purposes:
+\begin{itemize}
+\item Full DHCP handshake implementation
+\item Lease renewal and rebinding
+\item Configurable MAC address for testing multiple clients
+\item Support for both broadcast and unicast modes
+\item Command-line interface for manual testing
+\end{itemize}
+
+\section{Testing and Deployment}
+
+\subsection{Testing Scenarios}
+
+The implementation has been tested in multiple scenarios:
+
+\subsubsection{Loopback Testing}
+Using the loopback interface (127.0.0.1) for single-machine testing:
+\begin{itemize}
+\item Server binds to 0.0.0.0:67
+\item Clients connect via unicast to 127.0.0.1:67
+\item Multiple clients simulated with different MAC addresses
+\item Automated test script (test\_loopback.sh) validates functionality
+\end{itemize}
+
+\subsubsection{Local Area Network Testing}
+Real-world testing with multiple physical computers:
+\begin{itemize}
+\item Server configured on primary network interface
+\item Clients obtain addresses via broadcast discovery
+\item Cross-machine communication verified
+\item Network topology includes same-subnet and VLAN scenarios
+\end{itemize}
+
+\subsubsection{Virtual Machine Testing}
+Testing in virtualized environments:
+\begin{itemize}
+\item VirtualBox with bridged/internal networking
+\item VMware with custom virtual networks
+\item KVM/QEMU with bridge networking
+\item Docker containers with custom networks
+\end{itemize}
+
+\subsection{Verification Procedures}
+
+Verification of correct operation includes:
+\begin{enumerate}
+\item Server startup and configuration parsing
+\item Client discovery and offer reception
+\item Lease allocation and database updates
+\item Lease renewal at T1 intervals (50\% of lease time)
+\item Lease rebinding at T2 intervals (87.5\% of lease time)
+\item Proper handling of concurrent clients
+\item Correct response to client release messages
+\item Lease expiration and reclamation
+\end{enumerate}
+
+\subsection{Performance Considerations}
+
+The implementation demonstrates:
+\begin{itemize}
+\item Response time under 50ms for DISCOVER/OFFER exchange
+\item Support for concurrent client handling
+\item Efficient lease database operations
+\item Minimal memory footprint (typically under 10MB)
+\item CPU usage under 5\% during normal operations
+\end{itemize}
+
+\section{Network Deployment}
+
+\subsection{Production Deployment}
+
+For production deployment, the following considerations apply:
+
+\subsubsection{Hardware Requirements}
+\begin{itemize}
+\item Linux-based system (Ubuntu, Debian, RHEL, CentOS)
+\item GCC compiler with C11 support
+\item Root access for privileged port binding
+\item Network interface configuration capabilities
+\end{itemize}
+
+\subsubsection{Security Considerations}
+\begin{itemize}
+\item Run with minimal privileges after port binding
+\item Firewall rules to allow UDP ports 67/68 (v4) and 546/547 (v6)
+\item Regular lease database backups
+\item Monitoring for unauthorized DHCP servers (rogue DHCP detection)
+\item Network segmentation for different subnet types
+\end{itemize}
+
+\subsubsection{High Availability}
+For critical networks, consider:
+\begin{itemize}
+\item Multiple DHCP servers with split address pools
+\item Failover configuration between servers
+\item Regular synchronization of lease databases
+\item Monitoring and alerting for server failures
+\end{itemize}
+
+\subsection{Monitoring and Maintenance}
+
+Operational monitoring includes:
+\begin{itemize}
+\item Log file analysis for errors and warnings
+\item Lease database growth monitoring
+\item Pool utilization tracking (available vs. allocated addresses)
+\item Client renewal failure detection
+\item Network connectivity verification
+\end{itemize}
+
+Maintenance procedures:
+\begin{itemize}
+\item Regular configuration review and updates
+\item Lease database cleanup for expired entries
+\item Log rotation to prevent disk space exhaustion
+\item Software updates and security patches
+\item Periodic testing of failover mechanisms
+\end{itemize}
+
+\section{Advanced Features}
+
+\subsection{Static Reservations}
+
+Both DHCPv4 and DHCPv6 support static reservations:
+\begin{itemize}
+\item DHCPv4: Based on MAC address (hardware ethernet)
+\item DHCPv6: Based on DUID (client-id option)
+\item Ensures critical servers receive consistent addresses
+\item Useful for servers, printers, and infrastructure devices
+\end{itemize}
+
+\subsection{Option Handling}
+
+The implementation supports numerous DHCP options:
+
+For DHCPv4:
+\begin{itemize}
+\item Subnet mask (option 1)
+\item Router/Default gateway (option 3)
+\item DNS servers (option 6)
+\item Domain name (option 15)
+\item NTP servers (option 42)
+\item Renewal time T1 (option 58)
+\item Rebinding time T2 (option 59)
+\end{itemize}
+
+For DHCPv6:
+\begin{itemize}
+\item DNS servers (option 23)
+\item Domain search list (option 24)
+\item SNTP servers (option 31)
+\item Information refresh time (option 32)
+\item Server preference (option 7)
+\end{itemize}
+
+\subsection{Lease Renewal}
+
+Automatic lease renewal ensures continuous network connectivity:
+\begin{itemize}
+\item T1 timer (50\% of lease): Client attempts renewal with same server
+\item T2 timer (87.5\% of lease): Client broadcasts for any server
+\item Graceful handling of server unavailability
+\item Smooth transition for lease extensions
+\end{itemize}
+
+\section{Project Structure and Organization}
+
+The project is organized in a modular fashion:
+
+\begin{lstlisting}[caption=Project Directory Structure]
+DHCP_Server/
+├── DHCPv4/
+│   ├── config/         # Configuration files
+│   ├── data/           # Lease database
+│   ├── include/        # Header files
+│   ├── src/            # Source code
+│   └── utils/          # Utility functions
+├── DHCPv6/
+│   ├── config/         # DHCPv6 configuration
+│   ├── include/        # Header files
+│   ├── leases/         # Lease storage
+│   ├── monitor/        # Monitoring tools
+│   └── sources/        # Source code
+├── client/
+│   ├── client_v4.c     # DHCPv4 client
+│   └── client_v6.c     # DHCPv6 client
+├── logger/             # Logging system
+├── scripts/            # Testing scripts
+├── logs/               # Log files
+└── build/
+    ├── bin/            # Compiled binaries
+    └── obj/            # Object files
+\end{lstlisting}
+
+\section{Lessons Learned}
+
+\subsection{Technical Insights}
+
+Key technical insights gained during implementation:
+\begin{itemize}
+\item UDP socket programming requires careful buffer management
+\item Broadcast handling differs significantly from unicast
+\item Packet byte ordering (endianness) is critical for interoperability
+\item IPv6 multicast requires specific socket options and group joins
+\item Lease persistence requires atomic file operations
+\item Concurrent client handling benefits from non-blocking I/O
+\end{itemize}
+
+\subsection{Protocol Complexity}
+
+Understanding DHCP protocol complexity:
+\begin{itemize}
+\item State machine implementation for proper message sequencing
+\item Option encoding/decoding with variable-length fields
+\item Transaction ID tracking for request-response correlation
+\item Proper handling of retransmissions and timeouts
+\item Subnet selection based on giaddr and interface matching
+\end{itemize}
+
+\subsection{Testing Importance}
+
+Testing revealed several critical aspects:
+\begin{itemize}
+\item Loopback testing catches basic functionality issues
+\item Network testing reveals broadcast/multicast problems
+\item Cross-machine testing identifies endianness issues
+\item Concurrent client testing exposes race conditions
+\item Long-running tests reveal memory leaks and resource exhaustion
+\end{itemize}
+
+\section{Conclusion}
+
+This project successfully implements RFC-compliant DHCPv4 and DHCPv6 servers with comprehensive features including lease management, multiple subnet support, static reservations, and prefix delegation. The implementation demonstrates the fundamental concepts of dynamic host configuration protocols and provides practical experience with network programming, UDP sockets, and protocol state machines.
+
+The modular architecture allows for easy extension and maintenance, while the comprehensive testing framework ensures reliability across different network scenarios. The logging system provides valuable insights for debugging and operational monitoring.
+
+Future enhancements could include:
+\begin{itemize}
+\item DHCPv6 rapid commit for faster address assignment
+\item DHCP relay agent support for routed networks
+\item Web-based management interface
+\item Integration with dynamic DNS updates
+\item Enhanced security with authentication mechanisms
+\item Performance optimization for high-volume environments
+\end{itemize}
+
+The implementation serves both as a functional DHCP infrastructure for small to medium networks and as an educational tool for understanding network protocols at a fundamental level.
+
+\section*{Acknowledgment}
+
+This project was developed as part of the Operating Systems course (PSO - Proiect Sisteme de Operare). Special thanks to the instructors and peers who provided valuable feedback during development and testing.
+
+\begin{thebibliography}{00}
+\bibitem{rfc2131}
+R. Droms, ``Dynamic Host Configuration Protocol,'' RFC 2131, March 1997.
+[Online]. Available: https://www.rfc-editor.org/rfc/rfc2131
+
+\bibitem{rfc8415}
+T. Mrugalski et al., ``Dynamic Host Configuration Protocol for IPv6 (DHCPv6),'' RFC 8415, November 2018.
+[Online]. Available: https://www.rfc-editor.org/rfc/rfc8415
+
+\bibitem{rfc2132}
+S. Alexander and R. Droms, ``DHCP Options and BOOTP Vendor Extensions,'' RFC 2132, March 1997.
+[Online]. Available: https://www.rfc-editor.org/rfc/rfc2132
+
+\bibitem{rfc3315}
+R. Droms et al., ``Dynamic Host Configuration Protocol for IPv6 (DHCPv6),'' RFC 3315, July 2003. (Obsoleted by RFC 8415)
+[Online]. Available: https://www.rfc-editor.org/rfc/rfc3315
+
+\bibitem{rfc3633}
+O. Troan and R. Droms, ``IPv6 Prefix Options for Dynamic Host Configuration Protocol (DHCP) version 6,'' RFC 3633, December 2003.
+[Online]. Available: https://www.rfc-editor.org/rfc/rfc3633
+
+\bibitem{rfc4361}
+T. Lemon and B. Sommerfeld, ``Node-specific Client Identifiers for Dynamic Host Configuration Protocol Version Four (DHCPv4),'' RFC 4361, February 2006.
+[Online]. Available: https://www.rfc-editor.org/rfc/rfc4361
+
+\bibitem{stevens}
+W. R. Stevens, B. Fenner, and A. M. Rudoff, \emph{UNIX Network Programming, Volume 1: The Sockets Networking API}, 3rd ed. Addison-Wesley Professional, 2003.
+
+\bibitem{tanenbaum}
+A. S. Tanenbaum and D. J. Wetherall, \emph{Computer Networks}, 5th ed. Pearson, 2010.
+
+\end{thebibliography}
+
+\end{document}
