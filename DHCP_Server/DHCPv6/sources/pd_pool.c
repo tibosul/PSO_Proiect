@@ -18,18 +18,20 @@
 static void increment_prefix(struct in6_addr* ip, uint8_t plen) {
     if (plen == 0 || plen > 128) return;
     
-    // plen is 1-based (1..128)
-    // We want to add 1 << (128 - plen) basically, but doing it byte-wise.
-    // Actually, if we are iterating sub-prefixes of length `plen`, we want to increment the `plen`-th bit?
-    // No, if we have prefix P/plen, the next prefix is P + (1 << (128-plen)).
-    // But here 'plen' is the length of the delegated prefix (e.g. 60).
-    // So we invoke this to get the next valid start address for the NEXT chunk.
+    // We want to increment the prefix such that we get the next prefix of length `plen`.
+    // Effectively, we are creating a sequence of prefixes: P, P + 2^(128-plen), ...
+    // This is equivalent to adding 1 at the bit position `plen - 1`.
     
     int byte_idx = (plen - 1) / 8;
     int bit_in_byte = 7 - ((plen - 1) % 8);
     
+    // We add 1 at the specific bit.
+    // If bit_in_byte is 0 (LSB of byte), we add 1.
+    // If bit_in_byte is 7 (MSB of byte), we add 128 (0x80).
+    
     uint16_t add = 1 << bit_in_byte;
     
+    // Working correctly with carry from the specified byte backwards
     for (int i = byte_idx; i >= 0; i--) {
         uint16_t val = (uint16_t)ip->s6_addr[i] + add;
         ip->s6_addr[i] = (uint8_t)(val & 0xFF);
@@ -93,8 +95,6 @@ int pd_pool_init(pd_pool_t *pool, dhcpv6_subnet_t *subnet, lease_v6_db_t *db, ui
         for (uint32_t i = 0; i < db->count; i++) {
             dhcpv6_lease_t* L = &db->leases[i];
             if (L->type != Lease6_IA_PD) continue;
-            // Ignore released/expired unless we want to load them? 
-            // Usually we only care if In Use or Reserved
             if (!L->in_use) continue;
             
             pd_pool_entry_t* e = pd_pool_find_entry(pool, &L->prefix_v6, L->plen);
@@ -155,7 +155,11 @@ pd_allocation_result_t pd_pool_allocate(pd_pool_t *pool,
     for (uint32_t i=0; i<pool->pool_size; i++) {
         pd_pool_entry_t* e = &pool->entries[i];
         if (e->state == IP6_STATE_ALLOCATED && strcmp(e->duid, duid_hex) == 0) {
+             // Refresh lease
+             if (!lease_v6_add_ia_pd(db, duid_hex, duid_len, iaid, &e->prefix, e->plen, lease_time, hostname_opt)) {
+             }
              res.success = true;
+             res.is_new = false;
              res.prefix = e->prefix;
              res.plen = e->plen;
              return res;
@@ -195,10 +199,10 @@ pd_allocation_result_t pd_pool_allocate(pd_pool_t *pool,
     }
     
     if (lease_v6_db_save(db) != 0) {
-         // Log error?
     }
     
     res.success = true;
+    res.is_new = true;
     res.prefix = victim->prefix;
     res.plen = victim->plen;
     

@@ -419,6 +419,37 @@ int main(int argc, char** argv)
                                  log_error("  -> Failed to assign prefix address.");
                              }
                          }
+
+                         // --- Process Extra Options ---
+                         if (meta.dns_count > 0) {
+                             printf("  [DNS] Servers in Reply: ");
+                             for(int i=0; i<meta.dns_count; i++) {
+                                 char dns[INET6_ADDRSTRLEN];
+                                 inet_ntop(AF_INET6, &meta.dns_servers[i], dns, sizeof(dns));
+                                 printf("%s%s", dns, (i == meta.dns_count - 1) ? "" : ", ");
+                             }
+                             printf("\n");
+                         }
+
+                         if (meta.domain_search && meta.domain_search_len > 0) {
+                             printf("  [DNS] Domain Search List (Hex): ");
+                             for(int i=0;i<meta.domain_search_len;i++) printf("%02x ", meta.domain_search[i]);
+                             printf(" (RFC1035 encoded)\n");
+                         }
+
+                         if (meta.sntp_count > 0) {
+                             printf("  [SNTP] Servers in Reply: ");
+                             for(int i=0; i<meta.sntp_count; i++) {
+                                 char s[INET6_ADDRSTRLEN];
+                                 inet_ntop(AF_INET6, &meta.sntp_servers[i], s, sizeof(s));
+                                 printf("%s%s", s, (i == meta.sntp_count - 1) ? "" : ", ");
+                             }
+                             printf("\n");
+                         }
+
+                         if (meta.has_info_refresh_time) {
+                             printf("  [INFO] Information Refresh Time: %u seconds\n", meta.info_refresh_time);
+                         }
                          
                          state = STATE_BOUND;
                     }

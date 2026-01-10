@@ -451,10 +451,17 @@ ip6_pool_allocate(struct ip6_pool_t* pool,
     }
 
    
+    // Check for existing allocation for this DUID
     for (uint32_t i = 0; i < pool->pool_size; ++i) {
         struct ip6_pool_entry_t* e = &pool->entries[i];
         if (e->state == IP6_STATE_ALLOCATED && e->duid[0] && strcmp(e->duid, duid) == 0) {
-            R.success = true; R.ip_address = e->ip_address; return R;
+             if (!lease_v6_add_ia_na(db, duid, duid_len, iaid, &e->ip_address, lease_time, hostname_opt)) {
+                    snprintf(R.error_message, sizeof(R.error_message), "lease refresh failed");
+             }
+            R.success = true; 
+            R.is_new = false; 
+            R.ip_address = e->ip_address; 
+            return R;
         }
     }
 
@@ -486,7 +493,9 @@ ip6_pool_allocate(struct ip6_pool_t* pool,
                     snprintf(R.error_message, sizeof(R.error_message), "lease persist failed");
                     return R;
                 }
-                R.success = true; R.ip_address = e->ip_address; return R;
+                R.success = true; 
+                R.is_new = true;
+                R.ip_address = e->ip_address; return R;
             }
         }
     }
@@ -515,15 +524,17 @@ ip6_pool_allocate(struct ip6_pool_t* pool,
             continue;
         }
         R.success = true;
+        R.is_new = true;
         R.ip_address = e->ip_address; 
         goto end_and_save;
     }
-
+    
     snprintf(R.error_message, sizeof(R.error_message), "no free addresses");
-    end_and_save:
-        (void)lease_v6_db_save(db);
-        return R;
+
+end_and_save:
+    return R;
 }
+
 
 /* -------- print -------- */
 

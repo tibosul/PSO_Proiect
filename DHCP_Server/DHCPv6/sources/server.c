@@ -72,7 +72,6 @@ typedef struct {
 } server_ctx_t;
 
 static server_ctx_t ctx;
-static server_ctx_t ctx;
 static task_queue_t queue;
 static pthread_t threads[THREAD_POOL_SIZE];
 static pthread_t cleaner_thread;
@@ -161,7 +160,8 @@ void process_packet(uint8_t* buf, ssize_t len, struct sockaddr_in6* client_addr)
     // Determine Message Type
     uint8_t reply_type = 0;
     if (meta.msg_type == MSG_SOLICIT) reply_type = MSG_ADVERTISE;
-    else if (meta.msg_type == MSG_REQUEST || meta.msg_type == MSG_RENEW || meta.msg_type == MSG_REBIND) reply_type = MSG_REPLY;
+    else if (meta.msg_type == MSG_REQUEST || meta.msg_type == MSG_RENEW || meta.msg_type == MSG_REBIND || 
+             meta.msg_type == MSG_RELEASE || meta.msg_type == MSG_DECLINE) reply_type = MSG_REPLY;
     
     if (reply_type != 0) {
         // Init Header
@@ -177,23 +177,63 @@ void process_packet(uint8_t* buf, ssize_t len, struct sockaddr_in6* client_addr)
         if (meta.client_duid && meta.client_duid_len > 0) {
             dhcpv6_append_option(out_buf, BUF_SIZE, &out_len, OPT_CLIENTID, meta.client_duid, meta.client_duid_len);
         }
+
+        /* --- Inject Configured Options --- */
+        // ... (options appending code remains same) ...
         
+        // Handle RELEASE / DECLINE Actions (Pre-processing before building reply)
+        if (meta.msg_type == MSG_RELEASE || meta.msg_type == MSG_DECLINE) {
+             if (meta.has_ia_na && ctx.db.count > 0) {
+                 if (meta.msg_type == MSG_RELEASE) {
+                     lease_v6_release_ip(&ctx.db, &meta.requested_ip); 
+                 } else {
+                     if (pool) ip6_pool_mark_conflict(pool, meta.requested_ip, &ctx.db, "Client Decline");
+                 }
+             }
+             if (meta.has_ia_pd && pd_pool) {
+                  if (meta.msg_type == MSG_RELEASE) {
+                      pd_pool_release(pd_pool, &meta.requested_prefix, meta.requested_plen, &ctx.db);
+                  }
+             }
+        }
+
+        // ... options ...
+        
+        // 1. DNS Servers
+        const char* dns_str = subnet->dns_servers[0] ? subnet->dns_servers : ctx.config.global.global_dns_servers;
+        if (dns_str[0]) {
+             struct in6_addr dlist[8];
+             int c = str_to_ipv6_list(dns_str, dlist, 8);
+             if (c > 0) {
+                 ssize_t w = dhcpv6_append_dns_servers(out_buf + out_len, BUF_SIZE - out_len, dlist, c);
+                 if (w > 0) out_len += (size_t)w;
+             }
+        }
+        // ...
+
         // Process IA_NA
         if (meta.has_ia_na && pool) {
              char duid_hex[256];
              duid_bin_to_hex(meta.client_duid, meta.client_duid_len, duid_hex, sizeof(duid_hex));
              
-             struct ip6_allocation_result_t res = ip6_pool_allocate(pool, duid_hex, meta.client_duid_len,    
-                 meta.iaid, NULL, meta.requested_ip, &ctx.config, &ctx.db, subnet->default_lease_time);
-             
-             if (res.success) {
-                  dhcpv6_append_ia_na(out_buf, BUF_SIZE, &out_len, meta.iaid, &res.ip_address, 
-                                      subnet->default_lease_time, subnet->max_lease_time, 
-                                      subnet->default_lease_time, subnet->max_lease_time, STATUS_SUCCESS);
-                  if(ctx.stats) __sync_fetch_and_add(&ctx.stats->leases_active, 1);
+             if (meta.msg_type == MSG_RELEASE || meta.msg_type == MSG_DECLINE) {
+                 // Build Reply with Status Success
+                   dhcpv6_append_ia_na(out_buf, BUF_SIZE, &out_len, meta.iaid, &meta.requested_ip, 
+                                       0, 0, 0, 0, STATUS_SUCCESS);
+                if(ctx.stats) __sync_fetch_and_sub(&ctx.stats->leases_active, 1);
              } else {
-                  dhcpv6_append_ia_na(out_buf, BUF_SIZE, &out_len, meta.iaid, &zero_addr, 
-                                      0, 0, 0, 0, STATUS_NOADDRSAVAIL);
+                 struct ip6_allocation_result_t res = ip6_pool_allocate(pool, duid_hex, meta.client_duid_len,    
+                     meta.iaid, NULL, meta.requested_ip, &ctx.config, &ctx.db, subnet->default_lease_time);
+                 
+                 if (res.success) {
+                      dhcpv6_append_ia_na(out_buf, BUF_SIZE, &out_len, meta.iaid, &res.ip_address, 
+                                          subnet->default_lease_time, subnet->max_lease_time, 
+                                          subnet->default_lease_time, subnet->max_lease_time, STATUS_SUCCESS);
+                      if(res.is_new && ctx.stats) __sync_fetch_and_add(&ctx.stats->leases_active, 1);
+                 } else {
+                      dhcpv6_append_ia_na(out_buf, BUF_SIZE, &out_len, meta.iaid, &zero_addr, 
+                                          0, 0, 0, 0, STATUS_NOADDRSAVAIL);
+                 }
              }
         }
         
@@ -202,17 +242,23 @@ void process_packet(uint8_t* buf, ssize_t len, struct sockaddr_in6* client_addr)
              char duid_hex[256];
              duid_bin_to_hex(meta.client_duid, meta.client_duid_len, duid_hex, sizeof(duid_hex));
              
-             pd_allocation_result_t res = pd_pool_allocate(pd_pool, duid_hex, meta.client_duid_len, 
-                                                           meta.iaid_pd, NULL, &ctx.db, subnet->default_lease_time);
-             
-             if (res.success) {
-                  dhcpv6_append_ia_pd(out_buf, BUF_SIZE, &out_len, meta.iaid_pd, &res.prefix, res.plen,
-                                      subnet->default_lease_time, subnet->max_lease_time, 
-                                      subnet->default_lease_time, subnet->max_lease_time, STATUS_SUCCESS);
-                  if(ctx.stats) __sync_fetch_and_add(&ctx.stats->leases_active, 1);
+             if (meta.msg_type == MSG_RELEASE || meta.msg_type == MSG_DECLINE) {
+                    dhcpv6_append_ia_pd(out_buf, BUF_SIZE, &out_len, meta.iaid_pd, &meta.requested_prefix, meta.requested_plen,
+                                      0, 0, 0, 0, STATUS_SUCCESS);
+                    if(ctx.stats) __sync_fetch_and_sub(&ctx.stats->leases_active, 1);
              } else {
-                  dhcpv6_append_ia_pd(out_buf, BUF_SIZE, &out_len, meta.iaid_pd, &zero_addr, 0, 
-                                      0, 0, 0, 0, STATUS_NOADDRSAVAIL);
+                 pd_allocation_result_t res = pd_pool_allocate(pd_pool, duid_hex, meta.client_duid_len, 
+                                                               meta.iaid_pd, NULL, &ctx.db, subnet->default_lease_time);
+                 
+                 if (res.success) {
+                      dhcpv6_append_ia_pd(out_buf, BUF_SIZE, &out_len, meta.iaid_pd, &res.prefix, res.plen,
+                                          subnet->default_lease_time, subnet->max_lease_time, 
+                                          subnet->default_lease_time, subnet->max_lease_time, STATUS_SUCCESS);
+                      if(res.is_new && ctx.stats) __sync_fetch_and_add(&ctx.stats->leases_active, 1);
+                 } else {
+                      dhcpv6_append_ia_pd(out_buf, BUF_SIZE, &out_len, meta.iaid_pd, &zero_addr, 0, 
+                                          0, 0, 0, 0, STATUS_NOADDRSAVAIL);
+                 }
              }
         }
     }
@@ -292,7 +338,7 @@ void* worker_thread(void* arg) {
         
         pthread_mutex_unlock(&queue.lock);
         
-        if (ctx.stats) __sync_fetch_and_add(&ctx.stats->pkt_processed, 1);
+        // Removed early increment. Moved to process_packet success path.
         process_packet(task.buf, task.len, &task.client_addr);
     }
     return NULL;
