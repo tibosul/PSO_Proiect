@@ -170,12 +170,31 @@ int main(int argc, char** argv)
     int on = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) perror("setsockopt REUSEADDR");
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) perror("setsockopt REUSEPORT");
+
+    // Enable Multicast Loopback for local testing (client and server on same machine)
+    int loop = 1;
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
+        perror("setsockopt IPV6_MULTICAST_LOOP");
+    }
     
     if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0)
     {
         perror("bind failed");
         close(sock);
         return 1;
+    }
+    
+    // Bind to device to enforce interface selection
+    if (ifname) {
+        struct ifreq ifr;
+        memset(&ifr, 0, sizeof(ifr));
+        strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
+        if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) < 0) {
+             perror("setsockopt SO_BINDTODEVICE");
+             // Not fatal if root is missing but recommended
+        } else {
+             log_info("Bound socket to device: %s", ifname);
+        }
     }
     
     // Destination: All_DHCP_Relay_Agents_and_Servers (ff02::1:2)

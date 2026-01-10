@@ -12,6 +12,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 
 #include "logger.h"
 #include "config_v6.h"
@@ -355,7 +357,7 @@ void* dhcpv6_agent_start(void* arg) {
     
     // Load config
     memset(&ctx, 0, sizeof(ctx));
-    if (load_config_v6("config/dhcpv6.conf", &ctx.config) != 0) {
+    if (load_config_v6("DHCPv6/config/dhcpv6.conf", &ctx.config) != 0) {
         log_error("Failed to load config");
         return NULL;
     }
@@ -366,7 +368,7 @@ void* dhcpv6_agent_start(void* arg) {
     pthread_mutex_init(&ctx.db_lock, NULL);
 
     // Init DB
-    if (lease_v6_db_init(&ctx.db, "leases/dhcpd6.leases") != 0) {
+    if (lease_v6_db_init(&ctx.db, "DHCPv6/leases/dhcpd6.leases") != 0) {
         log_error("Failed to init lease DB");
         return NULL;
     }
@@ -440,16 +442,38 @@ void* dhcpv6_agent_start(void* arg) {
         return NULL;
     }
     
-    // Join Multicast Group ff02::1:2 (All DHCPv6 Servers)
-    struct ipv6_mreq mreq;
-    memset(&mreq, 0, sizeof(mreq));
-    inet_pton(AF_INET6, "ff02::1:2", &mreq.ipv6mr_multiaddr);
-    mreq.ipv6mr_interface = 0; 
-    
-    if (setsockopt(ctx.server_sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) < 0) {
-        perror("setsockopt(IPV6_JOIN_GROUP)");
+    // Join Multicast Group ff02::1:2 on ALL interfaces
+    struct ifaddrs *ifaddr, *ifa;
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
     } else {
-        log_info("Joined multicast group ff02::1:2");
+        for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == NULL) continue;
+            if (ifa->ifa_addr->sa_family != AF_INET6) continue; // we only care about v6 or just link existence
+            
+            // We need interface index. 
+            // Often getifaddrs returns multiple entries (one per address).
+            // We can just try joining on the index. Easiest is to do it once per interface name.
+            // But strict setsockopt acts on index.
+            
+            unsigned int ifindex = if_nametoindex(ifa->ifa_name);
+            if (ifindex == 0) continue;
+
+            struct ipv6_mreq mreq;
+            memset(&mreq, 0, sizeof(mreq));
+            inet_pton(AF_INET6, "ff02::1:2", &mreq.ipv6mr_multiaddr);
+            mreq.ipv6mr_interface = ifindex;
+
+            // Try joining. It might fail if already joined (EADDRINUSE) or if iface doesn't support multicast.
+            // We just log debug and continue.
+            if (setsockopt(ctx.server_sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) < 0) {
+                 // It's common to fail on some pseudo-interfaces or duplicates. 
+                 // log_debug("Multicast join failed on %s (idx %d): %s", ifa->ifa_name, ifindex, strerror(errno));
+            } else {
+                 log_info("Joined multicast group ff02::1:2 on %s", ifa->ifa_name);
+            }
+        }
+        freeifaddrs(ifaddr);
     }
 
     log_info("Listening on port %d...", DHCPV6_PORT_SERVER);
