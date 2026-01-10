@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <netinet/in.h>
 #include "utilsv6.h"
+#include "../../DHCPv4/include/utils/time_utils.h"
 
 #define LEASES6_MAX 4096
 #define DUID_MAX_LEN 128

@@ -181,6 +181,15 @@ void log_msg(log_level_t level, const char *format, ...)
     int fd = pick_fd_for_level(level);
     if (fd >= 0) write(fd, line, strlen(line));
 
+    // If writing to file, also mirror to console (stdout/stderr)
+    if (g_use_file && g_fd >= 0) {
+        if (level == LOG_ERROR || level == LOG_WARN) {
+             write(2, line, strlen(line));
+        } else {
+             write(1, line, strlen(line));
+        }
+    }
+
     pthread_mutex_unlock(&g_lock);
 }
 
