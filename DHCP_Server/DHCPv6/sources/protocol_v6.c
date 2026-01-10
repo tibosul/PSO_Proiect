@@ -375,6 +375,7 @@ ssize_t dhcpv6_build_ia_pd_reply(uint8_t msg_type,
                                  uint32_t valid_lifetime,
                                  uint16_t status_code)
 {
+    (void) status_code;
     if (!out_buf || !req_meta) return -1;
 
     uint8_t *p      = out_buf;

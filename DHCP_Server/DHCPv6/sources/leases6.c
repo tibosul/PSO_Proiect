@@ -769,6 +769,7 @@ dhcpv6_lease_t* lease_v6_add_ia_pd(lease_v6_db_t* db,
                                    uint32_t lease_secs,
                                    const char* hostname_opt)
 {
+   (void) duid_len;
     if (!db || !prefix_base) return NULL;
 
    // Search for existing lease for this Prefix
