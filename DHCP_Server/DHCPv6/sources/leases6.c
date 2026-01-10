@@ -116,9 +116,8 @@ static int write_fmt(int fd, const char* fmt,...)
 
     if(n<0) return -1;
 
-    if((size_t)n > sizeof(small))
-        n=(int)sizeof(small);
-    return (write_all(fd,small,(size_t)n)<0)?-1:0;
+    size_t to_write = (n < (int)sizeof(small)) ? (size_t)n : (sizeof(small) - 1);
+    return (write_all(fd, small, to_write) < 0) ? -1 : 0;
 }
 
 static int fsync_dirname(const char* path)
@@ -681,8 +680,8 @@ int lease_v6_db_append(lease_v6_db_t* db, const dhcpv6_lease_t* L){
          inet_ntop(AF_INET6, &L->prefix_v6, addr, sizeof(addr));
          write_fmt(fd, "prefix %s/%u {\n", addr, (unsigned)L->plen);
      }
-     write_fmt(fd, "\tduid %s; iaid %u;\n", duid_hex, (unsigned)L->iaid);
- 
+     write_fmt(fd, "\tduid %s;\n", duid_hex);
+     write_fmt(fd, "\tiaid %u;\n", (unsigned)L->iaid);
      format_lease_time(L->starts, tbuf, sizeof(tbuf));
      write_fmt(fd, "\tstarts %s;\n", tbuf);
      format_lease_time(L->ends, tbuf, sizeof(tbuf));
@@ -697,7 +696,11 @@ int lease_v6_db_append(lease_v6_db_t* db, const dhcpv6_lease_t* L){
      if (L->client_hostname[0])     write_fmt(fd, "\tclient-hostname \"%s\";\n", L->client_hostname);
      if (L->vendor_class[0]) write_fmt(fd, "\tvendor-class \"%s\";\n", L->vendor_class);
      if (L->fqdn[0])   write_fmt(fd, "\tfqdn \"%s\";\n", L->fqdn);
-    if (fsync(fd) < 0){ log_warn("v6-db: fsync append file failed: %s", strerror(errno)); }
+     write_fmt(fd, "}\n\n");
+    if (fsync(fd) < 0)
+    { 
+        log_warn("v6-db: fsync append file failed: %s", strerror(errno)); 
+    }
     close(fd);
   
     log_info("v6-db append one (%s)", (L->type==Lease6_IA_NA)?"IA_NA":"IA_PD");
@@ -950,54 +953,39 @@ int lease_v6_mark_reserved(lease_v6_db_t *db,
 {
     if (!db || !ip6 || !duid_hex) return -1;
 
-    /* caută lease existent sau creează unul nou */
-    dhcpv6_lease_t *L = NULL;
-    for (uint32_t i = 0; i < db->count; i++) {
-        if (memcmp(&db->leases[i].ip6_addr, ip6, sizeof(struct in6_addr)) == 0) {
-            L = &db->leases[i];
-            break;
-        }
-    }
+    dhcpv6_lease_t *L = lease_v6_find_by_ip(db, ip6);
 
-    if (!L){
+    if(!L) {
+        if (db->count >= LEASES6_MAX) return -1;
         L = &db->leases[db->count++];
         memset(L, 0, sizeof(*L));
-        L->type = Lease6_IA_NA;
+        L->in_use   = 1;
+        L->type     = Lease6_IA_NA;
         L->ip6_addr = *ip6;
     }
 
     int n = duid_hex_to_bin(duid_hex, L->duid, DUID_MAX_LEN);
     if (n < 0) return -1;
     L->duid_len = (uint16_t)n;
+    L->iaid = iaid;
 
     if (hostname)
+    {
         strncpy(L->client_hostname, hostname, sizeof(L->client_hostname) - 1);
+        L->client_hostname[sizeof(L->client_hostname) - 1] = '\0';
+    }
 
     time_t now = time(NULL);
     L->starts = now;
-    L->ends = now + 86400;  /* rezervare valabilă 1 zi, de exemplu */
+    L->ends = now + 86400;  
     L->tstp = now;
     L->cltt = now;
+
     L->state = LEASE_STATE_RESERVED;
     L->next_state = LEASE_STATE_FREE;
     L->rewind_state = LEASE_STATE_FREE;
 
-    /* adaugă comentariu în fișier */
-    int fd = open(db->filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
-    if (fd < 0) return -1;
-
-    char ip_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET6, ip6, ip_str, sizeof(ip_str));
-    write_fmt(fd, "# reserved for DUID %s (IAID %u) hostname \"%s\"\n",
-              duid_hex, (unsigned)iaid, hostname ? hostname : "");
-    write_fmt(fd, "lease %s {\n", ip_str);
-    write_fmt(fd, "\tbinding state reserved;\n");
-    write_fmt(fd, "}\n\n");
-
-    fsync(fd);
-    close(fd);
-
-    return 0;
+    return lease_v6_db_save(db);
 }
 
 int lease_v6_set_state(lease_v6_db_t* db, const struct in6_addr* ip6_addr, lease_state_t new_state)
@@ -1024,10 +1012,13 @@ int lease_v6_set_state(lease_v6_db_t* db, const struct in6_addr* ip6_addr, lease
     if (!L->starts) L->starts = now;
 
     if (new_state == LEASE_STATE_ACTIVE) {
-        if (!L->ends) L->ends = now + 3600; 
+        if (!L->ends || L->ends < now) L->ends = now + 3600;
+    } else if (new_state == LEASE_STATE_RESERVED) {
+        if (!L->ends || L->ends < now) L->ends = now + 86400;
     } else {
         L->ends = now;
-    }
+}
+
 
     return lease_v6_db_save(db);
 }

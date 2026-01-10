@@ -14,8 +14,6 @@
 
 static const char* S_UNKNOWN = "unknown";
 
-
-
 const char* ip6_state_to_string(ip6_state_t s)
 {
     switch (s) {
