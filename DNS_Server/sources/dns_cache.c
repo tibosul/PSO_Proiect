@@ -1,20 +1,36 @@
 #include "dns_cache.h"
+#include <ctype.h>
 
 cache_entry* root_node = NULL;
 
 int get_trie_index(char c)
 {
+    // Convertim totul la lowercase pentru case-insensitive DNS
+    c = tolower((unsigned char)c);
+
     if(c >= 'a' && c <= 'z')
     {
-        return c - 'a';
+        return c - 'a'; // 0-25
+    }
+    else if(c >= '0' && c <= '9')
+    {
+        return 26 + (c - '0'); // 26-35
+    }
+    else if(c == '-')
+    {
+        return 36;
+    }
+    else if(c == '_')
+    {
+        return 37;
     }
     else if(c == '.')
     {
-        return 26;
+        return 38;
     }
     else
     {
-        return -1;
+        return -1; // Caracter neacceptat
     }
 }
 
@@ -56,7 +72,7 @@ void cache_insert(char* query_name, const char* response_buffer, uint16_t respon
 
         if(index == -1)
         {
-            fprintf(stderr, "Invalid character detected in query name: '%c'!\n", query_name[i]);
+            printf("Invalid character detected in query name: '%c' (skipped caching)!\n", query_name[i]);
             return;
         }   
 

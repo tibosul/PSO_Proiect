@@ -8,7 +8,7 @@
 #include <time.h>
 #include <string.h>
 
-#define CACHE_CHARS 27
+#define CACHE_CHARS 40
 #define MAX_PACKET_SIZE 512
 
 typedef struct TrieNode{
