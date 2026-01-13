@@ -29,8 +29,8 @@
 \title{Implementarea și Analiza Serverelor DHCP v4/v6 și DNS\\
 {\footnotesize Sisteme de Alocare Dinamică a Adreselor IP și Rezoluție Nume de Domeniu}}
 
-\author{\IEEEauthorblockN{Stelian Tiberiu-Andrei + Moraru Andra + Marina Traian Ștefan}
-\IEEEauthorblockA{\textit{Calculatoare și sisteme informatice pentru apărare și securitate cibernetică} \\
+\author{\IEEEauthorblockN{Stelian Tiberiu-Andrei, Moraru Andra și Marina Traian Ștefan}
+\IEEEauthorblockA{\textit{ Facultatea de Sisteme Informatice şi Securitate Cibernetică } \\
 \textit{Academia Tehnică Militară "Ferdinand I"}\\
 București, România \\
 tiberiu-andrei.stelian@stud.mta.ro \\
@@ -41,7 +41,7 @@ traian-stefan.marina@stud.mta.ro}
 \maketitle
 
 \begin{abstract}
-Acest document prezintă implementarea și analiza unui sistem complet de servere DHCP (Dynamic Host Configuration Protocol) pentru IPv4 și IPv6, precum și a unui server DNS (Domain Name System). Proiectul oferă o soluție modulară și scalabilă pentru alocarea automată a adreselor IP și rezoluția numelor de domeniu în rețelele moderne. Sistemul include servere DHCP v4 și v6 complete, un server DNS autoritar cu suport pentru zone și caching, clienți funcționali, sistem de logging avansat și suport pentru multiple scenarii de testare. Implementarea respectă standardele RFC 2131 pentru DHCPv4, RFC 8415 pentru DHCPv6, și RFC 1035 pentru DNS, oferind funcționalități complete de management al lease-urilor, pool-uri de adrese configurabile, zone DNS autoritare și caching inteligent.
+Acest document prezintă implementarea și analiza unui sistem complet de servere DHCP (Dynamic Host Configuration Protocol) pentru IPv4 și IPv6, precum și a unui server DNS (Domain Name System). Proiectul oferă o soluție modulară și scalabilă pentru alocarea automată a adreselor IP și rezoluția numelor de domeniu în rețelele moderne. Sistemul include servere DHCP v4 și v6 complete, un server DNS autoritar cu suport pentru zone și caching, clienți funcționali, sistem de logging avansat și suport pentru multiple scenarii de testare. Implementarea respectă standardele RFC 2131 pentru DHCPv4, RFC 8415 pentru DHCPv6, și RFC 1034 și RFC 1035 pentru DNS, oferind funcționalități complete de management al lease-urilor, pool-uri de adrese configurabile, zone DNS autoritare și caching inteligent.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -56,7 +56,7 @@ DHCP, DHCPv4, DHCPv6, DNS, rețele de calculatoare, alocare IP, rezoluție nume,
 
 DHCP este un protocol de nivel aplicație din suita TCP/IP care permite dispozitivelor să obțină automat configurarea necesară pentru a comunica într-o rețea IP. Protocolul elimină necesitatea configurării manuale, reducând erorile și simplificând administrarea rețelei.
 
-Complementar cu DHCP, Domain Name System (DNS) joacă un rol crucial în funcționarea rețelelor moderne, permițând traducerea numelor de domeniu ușor de reținut de către oameni (de exemplu, \textit{www.example.com}) în adrese IP necesare pentru comunicarea între dispozitive. DNS reprezintă unul dintre pilonii fundamentali ai internetului, fără de care navigarea web și majoritatea serviciilor de rețea ar fi practic imposibile.
+Complementar cu DHCP, Domain Name System (DNS) joacă un rol important în funcționarea rețelelor moderne, permițând traducerea numelor de domeniu ușor de reținut de către oameni (de exemplu, \textit{www.mta.ro}) în adrese IP necesare pentru comunicarea între dispozitive. DNS reprezintă unul dintre pilonii fundamentali ai internetului, fără de care navigarea web și majoritatea serviciilor de rețea ar fi greu de realizat.
 
 \subsection{Motivația Proiectului}
 
@@ -401,28 +401,29 @@ struct dhcpv6_packet_meta_t
 };
 \end{lstlisting}
 
-\textbf{Header DNS}:
+\textbf{Structura pachetului DNS}:
 \begin{lstlisting}
-struct dns_header {
-    uint16_t identification;  // ID tranzactie
-    // Flags (16 biti)
-    uint16_t QR: 1;      // 0=query, 1=response
-    uint16_t Opcode: 4;  // 0=standard, 1=inverse
-    uint16_t AA: 1;      // Authoritative Answer
-    uint16_t TC: 1;      // Truncated
-    uint16_t RD: 1;      // Recursion Desired
-    uint16_t RA: 1;      // Recursion Available
-    uint16_t MBZ: 3;     // Must Be Zero
-    uint16_t Rcode: 4;   // Response code
-    // Contoare sectiuni
+
+typedef struct __attribute__((packed)) {
+    uint16_t identification; // folosit pentru identificarea perechilor cerere - raspuns
+    // flags
+    uint16_t QR: 1; // 0 = query (cerere) 1 = response -- serverul primeste pachete de query (bit 0) si trimite raspunsuri (bit 1)
+    uint16_t Opcode: 4; // 0 = standard query, 1 = inverse query, 2 = server status (tip interogare)
+    uint16_t AA: 1; // authoritative server (daca raspunsul provine de la un server autoritar pentru numele de domeniu sau de la un server intermediar)
+    uint16_t TC: 1; // pachet trunchiat da/nu 
+    uint16_t RD: 1; // recursion desired (daca clientul doreste raspuns doar de la serverul autoritarr sau doreste interogari suplimentare recursive)
+    uint16_t RA: 1; // recursion available (daca serverul care raspunde ofera sau nu interogari recursive)
+    uint16_t MBZ: 3; // must be zero (3 biti care obligatoriu trebuie sa fie 000)
+    uint16_t Rcode: 4; // return code (0 - succes, 1 eroare de formatare, 2 eroare server, 3 numele de domeniu nu exista)
+    // final flags
     uint16_t number_of_questions;
     uint16_t number_of_answers;
     uint16_t number_of_authoritative_answers;
     uint16_t number_of_additional_answers;
-}; // 12 bytes total
+}dns_header; // 5 * 2 = 10 octeti (uint16_t) fara flag-uri + 8 biti + 8 biti = 12 octeti (dimensiunea unui header DNS)
 \end{lstlisting}
 
-\textbf{Secțiune Question DNS}:
+\textbf{Secțiune interogare DNS}:
 \begin{lstlisting}
 struct dns_question_fixed {
     // uint8_t qname[];  // Nume variabil (encoded)
@@ -436,7 +437,7 @@ struct dns_question_fixed {
 struct resource_record_fixed {
     // uint8_t name[];    // Nume variabil
     uint16_t query_type;   // Tip record
-    uint16_t query_class;  // Clasă
+    uint16_t query_class;  // Clasa
     uint32_t TTL;          // Time to live (sec)
     uint16_t data_length;  // Lungime date
     // uint8_t rdata[];    // Date variabile
@@ -728,7 +729,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Validare funcționalitate de bază
     \item \textit{Setup}: Server și 3 clienți pe 127.0.0.1
     \item \textit{Rezultat așteptat}: Toți clienții primesc IP din range 127.0.0.100-200
-    \item \textit{Status}: ✓ PASSED - 31 lease-uri create
+    \item \textit{Status}: PASSED - 31 lease-uri create
 \end{itemize}
 
 \textbf{Scenario 2 - Same Subnet}:
@@ -736,7 +737,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Testare în rețea LAN reală
     \item \textit{Setup}: Server pe 192.168.1.10, clienți pe aceeași rețea
     \item \textit{Rezultat așteptat}: Clienți primesc IP via broadcast
-    \item \textit{Status}: ✓ PASSED - Broadcast funcțional
+    \item \textit{Status}: PASSED - Broadcast funcțional
 \end{itemize}
 
 \textbf{Scenario 3 - Virtual Machines}:
@@ -744,7 +745,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Izolare și testare cross-platform
     \item \textit{Setup}: VMware cu bridged networking
     \item \textit{Rezultat așteptat}: VM-uri obțin IP automat
-    \item \textit{Status}: ✓ PASSED - Funcțional pe VirtualBox și VMware
+    \item \textit{Status}: PASSED - Funcțional pe VirtualBox și VMware
 \end{itemize}
 
 \textbf{Scenario 4 - Docker Containers}:
@@ -752,7 +753,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Testare în mediu containerizat
     \item \textit{Setup}: Docker custom network
     \item \textit{Rezultat așteptat}: Containere comunică via DHCP
-    \item \textit{Status}: ✓ PASSED - Network bridge configurat corect
+    \item \textit{Status}: PASSED - Network bridge configurat corect
 \end{itemize}
 
 \textbf{Scenario 5 - Lease Renewal}:
@@ -760,7 +761,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Validare reînnoire automată
     \item \textit{Setup}: Client cu lease time scurt (60s)
     \item \textit{Rezultat așteptat}: Renewal la T1 (50\% din lease time)
-    \item \textit{Status}: ✓ PASSED - Renewal automat funcțional
+    \item \textit{Status}: PASSED - Renewal automat funcțional
 \end{itemize}
 
 \textbf{Scenario 6 - IP Pool Exhaustion}:
@@ -768,7 +769,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Comportament când pool-ul este gol
     \item \textit{Setup}: Pool de 5 IP-uri, 10 clienți
     \item \textit{Rezultat așteptat}: Primii 5 primesc IP, restul NAK
-    \item \textit{Status}: ✓ PASSED - Server răspunde corect cu NAK
+    \item \textit{Status}: PASSED - Server răspunde corect cu NAK
 \end{itemize}
 
 \textbf{Scenario 7 - IPv6 Prefix Delegation}:
@@ -776,7 +777,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Validare funcționalitate PD pentru routere/gateway-uri
     \item \textit{Setup}: Server DHCPv6 cu PD pool 2001:db8:100::/48 (delegare /56), client router
     \item \textit{Rezultat așteptat}: Client primește prefix /56 (ex: 2001:db8:100::/56) și îl subalochează
-    \item \textit{Status}: ✓ PASSED - Prefix alocat corect, renewal funcțional
+    \item \textit{Status}: PASSED - Prefix alocat corect, renewal funcțional
 \end{itemize}
 
 \textbf{Scenario 8 - Dual IA\_NA + IA\_PD Request}:
@@ -784,7 +785,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Client solicită simultan adresă IPv6 și prefix
     \item \textit{Setup}: Client router cu IAID distinct pentru NA și PD
     \item \textit{Rezultat așteptat}: Server alocă atât adresă individuală cât și prefix /60
-    \item \textit{Status}: ✓ PASSED - Ambele resurse alocate independent
+    \item \textit{Status}: PASSED - Ambele resurse alocate independent
 \end{itemize}
 
 \textbf{Scenario 9 - DNS Zone Query}:
@@ -792,7 +793,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Testare rezoluție pentru zone autoritare locale
     \item \textit{Setup}: Server DNS cu zonă "localhost", client query pentru "www.localhost"
     \item \textit{Rezultat așteptat}: Răspuns autoritar (AA flag set) cu înregistrare A pentru 127.0.0.1
-    \item \textit{Status}: ✓ PASSED - Rezoluție corectă, flag AA setat
+    \item \textit{Status}: PASSED - Rezoluție corectă, flag AA setat
 \end{itemize}
 
 \textbf{Scenario 10 - DNS Caching}:
@@ -800,7 +801,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Validare funcționalitate cache cu TTL
     \item \textit{Setup}: Query pentru domeniu extern, apoi repetare query în interval TTL
     \item \textit{Rezultat așteptat}: Prima cerere forward către upstream, a doua din cache (latență redusă)
-    \item \textit{Status}: ✓ PASSED - Cache hit pentru query repetat, timp răspuns <1ms
+    \item \textit{Status}: PASSED - Cache hit pentru query repetat, timp răspuns <1ms
 \end{itemize}
 
 \textbf{Scenario 11 - DNS Forwarding}:
@@ -808,7 +809,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Testare forwarding către servere upstream pentru domenii externe
     \item \textit{Setup}: Query pentru "google.com", forwarders configurați (8.8.8.8, 1.1.1.1)
     \item \textit{Rezultat așteptat}: Server forwardează query, returnează răspuns de la upstream
-    \item \textit{Status}: ✓ PASSED - Forwarding funcțional, răspuns valid primit
+    \item \textit{Status}: PASSED - Forwarding funcțional, răspuns valid primit
 \end{itemize}
 
 \textbf{Scenario 12 - DNS NXDOMAIN}:
@@ -816,7 +817,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Comportament pentru domenii inexistente
     \item \textit{Setup}: Query pentru domeniu invalid în zonă autoritară
     \item \textit{Rezultat așteptat}: Răspuns cu Rcode=3 (NXDOMAIN)
-    \item \textit{Status}: ✓ PASSED - NXDOMAIN returnat corect, negative TTL aplicat
+    \item \textit{Status}: PASSED - NXDOMAIN returnat corect, negative TTL aplicat
 \end{itemize}
 
 \textbf{Scenario 13 - DNS Multiple Record Types}:
@@ -824,7 +825,7 @@ Proiectul implementează testare pe multiple niveluri:
     \item \textit{Obiectiv}: Testare înregistrări A, AAAA, MX, CNAME
     \item \textit{Setup}: Zonă cu multiple tipuri de înregistrări
     \item \textit{Rezultat așteptat}: Query-uri pentru fiecare tip returnează răspunsul corect
-    \item \textit{Status}: ✓ PASSED - Toate tipurile suportate funcționează
+    \item \textit{Status}: PASSED - Toate tipurile suportate funcționează
 \end{itemize}
 
 \subsection{Rezultate Testare}
