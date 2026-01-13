@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -8,6 +10,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
 #include "../include/src/lease_v4.h"
 #include "../include/utils/string_utils.h"
 #include "../include/utils/network_utils.h"
